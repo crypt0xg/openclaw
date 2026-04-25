@@ -255,6 +255,39 @@ describe("web auto-reply connection", () => {
     }
   });
 
+  it("keeps quiet linked-device sessions connected by default", async () => {
+    vi.useFakeTimers();
+    try {
+      const sleep = vi.fn(async () => {});
+      const scripted = createScriptedWebListenerFactory();
+      const { controller, run } = startWebAutoReplyMonitor({
+        monitorWebChannelFn: monitorWebChannel as never,
+        listenerFactory: scripted.listenerFactory,
+        sleep,
+        heartbeatSeconds: 60,
+        watchdogCheckMs: 5,
+      });
+
+      await vi.waitFor(
+        () => {
+          expect(scripted.getListenerCount()).toBe(1);
+        },
+        { timeout: 250, interval: 2 },
+      );
+
+      await vi.advanceTimersByTimeAsync(31 * 60 * 1000);
+      await Promise.resolve();
+
+      expect(scripted.getListenerCount()).toBe(1);
+      expect(sleep).not.toHaveBeenCalled();
+
+      controller.abort();
+      await run;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("gives a reconnected listener a fresh watchdog window", async () => {
     vi.useFakeTimers();
     try {

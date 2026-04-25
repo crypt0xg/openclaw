@@ -147,6 +147,8 @@ OpenClaw recommends running WhatsApp on a separate number when possible. (The ch
 
 - Gateway owns the WhatsApp socket and reconnect loop.
 - Outbound sends require an active WhatsApp listener for the target account.
+- Quiet linked-device sessions are not restarted solely because no inbound app
+  messages arrived; disconnects and Gateway health state drive recovery.
 - Status and broadcast chats are ignored (`@status`, `@broadcast`).
 - Direct chats use DM session rules (`session.dmScope`; default `main` collapses DMs to the agent main session).
 - Group sessions are isolated (`agent:<agentId>:whatsapp:group:<jid>`).

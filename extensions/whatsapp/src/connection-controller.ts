@@ -562,6 +562,10 @@ export class WhatsAppConnectionController {
       hooks.onHeartbeat?.(snapshot);
     }, this.heartbeatSeconds * 1000);
 
+    if (this.messageTimeoutMs <= 0) {
+      return;
+    }
+
     connection.watchdogTimer = setInterval(() => {
       const baselineAt = connection.lastInboundAt ?? connection.startedAt;
       const staleForMs = Date.now() - baselineAt;
