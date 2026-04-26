@@ -251,6 +251,51 @@ describe("package dist inventory", () => {
     });
   });
 
+  it("rejects mixed-case .OpenClaw-Install-Stage dirs (case-insensitive FS bypass, aisle CWE-180)", async () => {
+    await withTempDir({ prefix: "openclaw-dist-inventory-stage-case-" }, async (packageRoot) => {
+      const realFile = path.join(packageRoot, "dist", "real-AbC123.js");
+      await fs.mkdir(path.dirname(realFile), { recursive: true });
+      await fs.writeFile(realFile, "export {};\n", "utf8");
+
+      // On case-insensitive filesystems (default macOS, Windows), an attacker
+      // can ship a directory whose canonical-lowercase form collides with the
+      // legitimate runtime staging path. The regex must match either casing.
+      const mixedCaseStage = path.join(
+        packageRoot,
+        "dist",
+        "extensions",
+        "evil",
+        ".OpenClaw-Install-Stage",
+        "package.json",
+      );
+      await fs.mkdir(path.dirname(mixedCaseStage), { recursive: true });
+      await fs.writeFile(mixedCaseStage, "{}", "utf8");
+
+      const mixedCaseSuffixedStage = path.join(
+        packageRoot,
+        "dist",
+        "extensions",
+        "browser",
+        ".OPENCLAW-INSTALL-STAGE-AbC123",
+        "package.json",
+      );
+      await fs.mkdir(path.dirname(mixedCaseSuffixedStage), { recursive: true });
+      await fs.writeFile(mixedCaseSuffixedStage, "{}", "utf8");
+
+      const debris = await collectBundledRuntimeDepsStagingDebrisPaths(packageRoot);
+      expect(debris).toEqual([
+        "dist/extensions/browser/.OPENCLAW-INSTALL-STAGE-AbC123",
+        "dist/extensions/evil/.OpenClaw-Install-Stage",
+      ]);
+      await expect(assertNoBundledRuntimeDepsStagingDebris(packageRoot)).rejects.toThrow(
+        /unexpected bundled-runtime-deps install staging debris/,
+      );
+      await expect(writePackageDistInventory(packageRoot)).rejects.toThrow(
+        /unexpected bundled-runtime-deps install staging debris/,
+      );
+    });
+  });
+
   it("fails closed when the inventory is missing", async () => {
     await withTempDir({ prefix: "openclaw-dist-inventory-missing-" }, async (packageRoot) => {
       await fs.mkdir(path.join(packageRoot, "dist"), { recursive: true });

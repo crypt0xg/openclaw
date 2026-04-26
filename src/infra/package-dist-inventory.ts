@@ -32,8 +32,12 @@ const OMITTED_DIST_SUBTREE_PATTERNS = [
   // commit. They MUST NOT trigger "unexpected packaged dist file" verifier
   // errors. Matches both the bare `.openclaw-install-stage` (used by
   // bundled-runtime-deps.ts) and the `mkdtemp`-suffixed variants like
-  // `.openclaw-install-stage-AbC123` (used by install-package-dir.ts). (#71752)
-  /^dist\/extensions\/[^/]+\/\.openclaw-install-stage(?:-[^/]+)?(?:\/|$)/u,
+  // `.openclaw-install-stage-AbC123` (used by install-package-dir.ts).
+  // The `i` flag is required so case-insensitive filesystems (default macOS,
+  // Windows) treat `.OpenClaw-Install-Stage` and the canonical lowercase form
+  // as the same path; the runtime install path resolves to the same inode
+  // either way. (#71752, aisle CWE-180)
+  /^dist\/extensions\/[^/]+\/\.openclaw-install-stage(?:-[^/]+)?(?:\/|$)/iu,
   /^dist\/extensions\/qa-matrix(?:\/|$)/u,
   new RegExp(`^dist/plugin-sdk/extensions/${LEGACY_QA_LAB_DIR}(?:/|$)`, "u"),
 ] as const;
@@ -120,7 +124,11 @@ export async function collectPackageDistInventory(packageRoot: string): Promise<
   return await collectRelativeFiles(path.join(packageRoot, "dist"), packageRoot);
 }
 
-const INSTALL_STAGE_DEBRIS_DIR_PATTERN = /^\.openclaw-install-stage(?:-[^/]+)?$/u;
+// Case-insensitive: a malicious tarball that ships `.OpenClaw-Install-Stage`
+// on a case-insensitive filesystem (default macOS, Windows) would otherwise
+// evade this check while still resolving to the canonical lowercase path at
+// runtime install time. (aisle CWE-180 on PR #71774)
+const INSTALL_STAGE_DEBRIS_DIR_PATTERN = /^\.openclaw-install-stage(?:-[^/]+)?$/iu;
 
 export async function collectBundledRuntimeDepsStagingDebrisPaths(
   packageRoot: string,
