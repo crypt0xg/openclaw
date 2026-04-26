@@ -11,6 +11,7 @@ import { runStatusJsonCommand } from "./status-json-command.ts";
 import { buildStatusOverviewSurfaceFromScan } from "./status-overview-surface.ts";
 import {
   loadStatusProviderUsageModule,
+  resolveStatusGatewayMemoryRuntimeSafe,
   resolveStatusGatewayHealth,
   resolveStatusSecurityAudit,
   resolveStatusRuntimeSnapshot,
@@ -268,6 +269,15 @@ export async function statusCommand(
         formatUsageReportLines(usage),
       )
     : undefined;
+  const memoryRuntime =
+    memory || !memoryPlugin.enabled
+      ? null
+      : await resolveStatusGatewayMemoryRuntimeSafe({
+          config: cfg,
+          timeoutMs: opts.timeoutMs,
+          gatewayReachable,
+          callOverrides: scan.gatewayCallOverrides,
+        });
   const overviewSurface = buildStatusOverviewSurfaceFromScan({
     scan: {
       cfg,
@@ -303,6 +313,7 @@ export async function statusCommand(
       channelIssues,
       memory,
       memoryPlugin,
+      memoryRuntime,
       pluginCompatibility,
       pairingRecovery,
       tableWidth,

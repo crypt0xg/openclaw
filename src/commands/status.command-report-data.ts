@@ -24,7 +24,11 @@ import {
   statusHealthColumns,
   type StatusMemoryStateResolvers,
 } from "./status.command-sections.js";
-import type { MemoryPluginStatus, MemoryStatusSnapshot } from "./status.scan.shared.js";
+import type {
+  MemoryPluginStatus,
+  MemoryRuntimeStatusSnapshot,
+  MemoryStatusSnapshot,
+} from "./status.scan.shared.js";
 import type { SessionStatus, StatusSummary } from "./status.types.js";
 
 export async function buildStatusCommandReportData(
@@ -61,6 +65,7 @@ export async function buildStatusCommandReportData(
     }>;
     memory: MemoryStatusSnapshot | null;
     memoryPlugin: MemoryPluginStatus;
+    memoryRuntime?: MemoryRuntimeStatusSnapshot | null;
     pluginCompatibility: PluginCompatibilityNotice[];
     pairingRecovery: {
       requestId: string | null;
@@ -101,6 +106,7 @@ export async function buildStatusCommandReportData(
     agentStatus: params.agentStatus,
     memory: params.memory,
     memoryPlugin: params.memoryPlugin,
+    memoryRuntime: params.memoryRuntime,
     pluginCompatibility: params.pluginCompatibility,
     ok: params.ok,
     warn: params.warn,

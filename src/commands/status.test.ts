@@ -398,6 +398,35 @@ const mocks = vi.hoisted(() => ({
     ...createDefaultProbeGatewayResult(),
   }),
   callGateway: vi.fn().mockResolvedValue({}),
+  getActiveMemorySearchManager: vi.fn<(_params: { agentId: string }) => Promise<unknown>>(
+    async ({ agentId }) => ({
+      manager: {
+        probeVectorAvailability: vi.fn(async () => true),
+        status: () => ({
+          files: 2,
+          chunks: 3,
+          dirty: false,
+          workspaceDir: "/tmp/openclaw",
+          dbPath: "/tmp/memory.sqlite",
+          provider: "openai",
+          model: "text-embedding-3-small",
+          requestedProvider: "openai",
+          sources: ["memory"],
+          sourceCounts: [{ source: "memory", files: 2, chunks: 3 }],
+          cache: { enabled: true, entries: 10, maxEntries: 500 },
+          fts: { enabled: true, available: true },
+          vector: {
+            enabled: true,
+            available: true,
+            extensionPath: "/opt/vec0.dylib",
+            dims: 1024,
+          },
+        }),
+        close: vi.fn(async () => {}),
+        __agentId: agentId,
+      },
+    }),
+  ),
   listGatewayAgentsBasic: vi.fn().mockReturnValue({
     defaultId: "main",
     mainKey: "agent:main:main",
@@ -489,33 +518,7 @@ vi.mock("../channels/config-presence.js", () => ({
 }));
 
 vi.mock("../plugins/memory-runtime.js", () => ({
-  getActiveMemorySearchManager: vi.fn(async ({ agentId }: { agentId: string }) => ({
-    manager: {
-      probeVectorAvailability: vi.fn(async () => true),
-      status: () => ({
-        files: 2,
-        chunks: 3,
-        dirty: false,
-        workspaceDir: "/tmp/openclaw",
-        dbPath: "/tmp/memory.sqlite",
-        provider: "openai",
-        model: "text-embedding-3-small",
-        requestedProvider: "openai",
-        sources: ["memory"],
-        sourceCounts: [{ source: "memory", files: 2, chunks: 3 }],
-        cache: { enabled: true, entries: 10, maxEntries: 500 },
-        fts: { enabled: true, available: true },
-        vector: {
-          enabled: true,
-          available: true,
-          extensionPath: "/opt/vec0.dylib",
-          dims: 1024,
-        },
-      }),
-      close: vi.fn(async () => {}),
-      __agentId: agentId,
-    },
-  })),
+  getActiveMemorySearchManager: mocks.getActiveMemorySearchManager,
 }));
 
 vi.mock("../config/sessions/main-session.js", () => ({
@@ -744,6 +747,29 @@ vi.mock("./status-runtime-shared.ts", () => ({
     }),
   ),
   resolveStatusUsageSummary: vi.fn(async () => undefined),
+  resolveStatusGatewayMemoryRuntimeSafe: vi.fn(
+    async (params: { gatewayReachable: boolean; config: unknown; timeoutMs?: number }) => {
+      if (!params.gatewayReachable) {
+        return null;
+      }
+      const payload = await mocks.callGateway({
+        method: "doctor.memory.status",
+        timeoutMs: params.timeoutMs,
+        config: params.config,
+      });
+      const runtime = payload.runtime ?? {
+        ok: payload.embedding?.ok === true,
+        error: payload.embedding?.error,
+      };
+      return {
+        checked: true,
+        ok: runtime.ok,
+        ...(payload.provider ? { provider: payload.provider } : {}),
+        ...(runtime.error ? { error: runtime.error } : {}),
+        ...(payload.embedding ? { embedding: payload.embedding } : {}),
+      };
+    },
+  ),
   resolveStatusRuntimeSnapshot: vi.fn(
     async (params: {
       includeSecurityAudit?: boolean;
@@ -875,6 +901,33 @@ describe("statusCommand", () => {
     mocks.probeGateway.mockResolvedValue(createDefaultProbeGatewayResult());
     mocks.callGateway.mockReset();
     mocks.callGateway.mockResolvedValue({});
+    mocks.getActiveMemorySearchManager.mockReset();
+    mocks.getActiveMemorySearchManager.mockResolvedValue({
+      manager: {
+        probeVectorAvailability: vi.fn(async () => true),
+        status: () => ({
+          files: 2,
+          chunks: 3,
+          dirty: false,
+          workspaceDir: "/tmp/openclaw",
+          dbPath: "/tmp/memory.sqlite",
+          provider: "openai",
+          model: "text-embedding-3-small",
+          requestedProvider: "openai",
+          sources: ["memory"],
+          sourceCounts: [{ source: "memory", files: 2, chunks: 3 }],
+          cache: { enabled: true, entries: 10, maxEntries: 500 },
+          fts: { enabled: true, available: true },
+          vector: {
+            enabled: true,
+            available: true,
+            extensionPath: "/opt/vec0.dylib",
+            dims: 1024,
+          },
+        }),
+        close: vi.fn(async () => {}),
+      },
+    });
     mocks.listGatewayAgentsBasic.mockReset();
     mocks.listGatewayAgentsBasic.mockReturnValue({
       defaultId: "main",
@@ -1085,6 +1138,40 @@ describe("statusCommand", () => {
     expect(logs.some((line) => line.includes("Cache"))).toBe(true);
     expect(logs.some((line) => line.includes("40% hit"))).toBe(true);
     expect(logs.some((line) => line.includes("read 2.0k"))).toBe(true);
+  });
+
+  it("reports gateway memory runtime readiness when local memory snapshot is unavailable", async () => {
+    mockProbeGatewayResult({
+      ok: true,
+      connectLatencyMs: 10,
+      error: null,
+      health: {},
+      status: {},
+      presence: [],
+    });
+    mocks.getActiveMemorySearchManager.mockResolvedValue({
+      manager: null,
+      error: "local runtime unavailable",
+    });
+    mocks.callGateway.mockImplementation(async ({ method }: { method: string }) => {
+      if (method === "doctor.memory.status") {
+        return {
+          agentId: "main",
+          provider: "memory-lancedb",
+          runtime: { ok: true },
+          embedding: { ok: false, error: "embedding credentials unavailable" },
+        };
+      }
+      return {};
+    });
+
+    const logs = await runStatusAndGetLogs();
+    const output = logs.join("\n");
+
+    expect(output).toContain("Memory");
+    expect(output).toContain("runtime ready");
+    expect(output).toContain("provider memory-lancedb");
+    expect(output).not.toContain("enabled (plugin memory-core) · unavailable");
   });
 
   it("shows a maintenance hint when task audit errors are present", async () => {

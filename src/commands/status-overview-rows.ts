@@ -24,7 +24,11 @@ import {
   buildStatusTasksValue,
   type StatusMemoryStateResolvers,
 } from "./status.command-sections.js";
-import type { MemoryPluginStatus, MemoryStatusSnapshot } from "./status.scan.shared.js";
+import type {
+  MemoryPluginStatus,
+  MemoryRuntimeStatusSnapshot,
+  MemoryStatusSnapshot,
+} from "./status.scan.shared.js";
 import type { StatusSummary } from "./status.types.js";
 
 export function buildStatusCommandOverviewRows(
@@ -45,6 +49,7 @@ export function buildStatusCommandOverviewRows(
     };
     memory: MemoryStatusSnapshot | null;
     memoryPlugin: MemoryPluginStatus;
+    memoryRuntime?: MemoryRuntimeStatusSnapshot | null;
     pluginCompatibility: PluginCompatibilityNotice[];
     ok: (value: string) => string;
     warn: (value: string) => string;
@@ -83,6 +88,7 @@ export function buildStatusCommandOverviewRows(
   const memoryValue = buildStatusMemoryValue({
     memory: params.memory,
     memoryPlugin: params.memoryPlugin,
+    memoryRuntime: params.memoryRuntime,
     ok: params.ok,
     warn: params.warn,
     muted: params.muted,

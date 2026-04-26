@@ -9,7 +9,11 @@ import { normalizeLowercaseStringOrEmpty } from "../shared/string-coerce.js";
 import type { TableColumn } from "../terminal/table.js";
 import type { HealthSummary } from "./health.js";
 import type { AgentLocalStatus } from "./status.agent-local.js";
-import type { MemoryStatusSnapshot, MemoryPluginStatus } from "./status.scan.shared.js";
+import type {
+  MemoryRuntimeStatusSnapshot,
+  MemoryStatusSnapshot,
+  MemoryPluginStatus,
+} from "./status.scan.shared.js";
 import type { SessionStatus, StatusSummary } from "./status.types.js";
 
 type AgentStatusLike = {
@@ -141,6 +145,7 @@ export function buildStatusMemoryValue(
   params: {
     memory: MemoryLike;
     memoryPlugin: MemoryPluginLike;
+    memoryRuntime?: MemoryRuntimeStatusSnapshot | null;
     ok: (value: string) => string;
     warn: (value: string) => string;
     muted: (value: string) => string;
@@ -152,6 +157,13 @@ export function buildStatusMemoryValue(
   }
   if (!params.memory) {
     const slot = params.memoryPlugin.slot ? `plugin ${params.memoryPlugin.slot}` : "plugin";
+    if (params.memoryRuntime?.checked && params.memoryRuntime.ok) {
+      const parts = [`enabled (${slot})`, params.ok("runtime ready")];
+      if (params.memoryRuntime.provider) {
+        parts.push(`provider ${params.memoryRuntime.provider}`);
+      }
+      return parts.join(" · ");
+    }
     return params.muted(`enabled (${slot}) · unavailable`);
   }
   const parts: string[] = [];

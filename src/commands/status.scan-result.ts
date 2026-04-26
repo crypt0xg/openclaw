@@ -33,6 +33,7 @@ export type StatusScanResult = {
   gatewayProbe: GatewayProbeSnapshot["gatewayProbe"];
   gatewayReachable: boolean;
   gatewaySelf: ReturnType<typeof pickGatewaySelfPresence>;
+  gatewayCallOverrides?: GatewayProbeSnapshot["gatewayCallOverrides"];
   channelIssues: ReturnType<typeof collectChannelStatusIssuesFn>;
   agentStatus: Awaited<ReturnType<typeof getAgentLocalStatusesFn>>;
   channels: Awaited<ReturnType<typeof buildChannelsTableFn>>;
@@ -61,6 +62,7 @@ export function buildStatusScanResult(params: {
     | "gatewayProbe"
     | "gatewayReachable"
     | "gatewaySelf"
+    | "gatewayCallOverrides"
   >;
   channelIssues: ReturnType<typeof collectChannelStatusIssuesFn>;
   agentStatus: Awaited<ReturnType<typeof getAgentLocalStatusesFn>>;
@@ -87,6 +89,7 @@ export function buildStatusScanResult(params: {
     gatewayProbe: params.gatewaySnapshot.gatewayProbe,
     gatewayReachable: params.gatewaySnapshot.gatewayReachable,
     gatewaySelf: params.gatewaySnapshot.gatewaySelf,
+    gatewayCallOverrides: params.gatewaySnapshot.gatewayCallOverrides,
     channelIssues: params.channelIssues,
     agentStatus: params.agentStatus,
     channels: params.channels,

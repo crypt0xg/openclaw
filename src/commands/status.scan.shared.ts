@@ -36,6 +36,17 @@ export type MemoryPluginStatus = {
   reason?: string;
 };
 
+export type MemoryRuntimeStatusSnapshot = {
+  checked: boolean;
+  ok: boolean;
+  provider?: string;
+  error?: string;
+  embedding?: {
+    ok: boolean;
+    error?: string;
+  };
+};
+
 export type GatewayProbeSnapshot = {
   gatewayConnection: ReturnType<typeof buildGatewayConnectionDetailsWithResolvers>;
   remoteUrlMissing: boolean;

@@ -191,6 +191,7 @@ describe("doctor.memory.status", () => {
       expect.objectContaining({
         agentId: "main",
         provider: "gemini",
+        runtime: { ok: true },
         embedding: { ok: true },
         dreaming: expect.objectContaining({
           enabled: false,
@@ -224,6 +225,13 @@ describe("doctor.memory.status", () => {
     await invokeDoctorMemoryStatus(respond);
 
     expectEmbeddingErrorResponse(respond, "memory search unavailable");
+    expect(respond).toHaveBeenCalledWith(
+      true,
+      expect.objectContaining({
+        runtime: { ok: false, error: "memory search unavailable" },
+      }),
+      undefined,
+    );
   });
 
   it("returns probe failure when manager probe throws", async () => {
@@ -240,6 +248,14 @@ describe("doctor.memory.status", () => {
     await invokeDoctorMemoryStatus(respond);
 
     expectEmbeddingErrorResponse(respond, "gateway memory probe failed: timeout");
+    expect(respond).toHaveBeenCalledWith(
+      true,
+      expect.objectContaining({
+        provider: "openai",
+        runtime: { ok: true },
+      }),
+      undefined,
+    );
     expect(close).toHaveBeenCalled();
   });
 

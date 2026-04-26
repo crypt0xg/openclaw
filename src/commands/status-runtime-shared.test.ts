@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   resolveStatusGatewayHealth,
   resolveStatusGatewayHealthSafe,
+  resolveStatusGatewayMemoryRuntimeSafe,
   resolveStatusLastHeartbeat,
   resolveStatusRuntimeDetails,
   resolveStatusRuntimeSnapshot,
@@ -187,6 +188,43 @@ describe("status-runtime-shared", () => {
       { label: "LaunchAgent" },
       { label: "node" },
     ]);
+  });
+
+  it("resolves gateway memory runtime separately from embedding probe health", async () => {
+    mocks.callGateway.mockResolvedValueOnce({
+      agentId: "main",
+      provider: "memory-lancedb",
+      runtime: { ok: true },
+      embedding: { ok: false, error: "embedding credentials unavailable" },
+    });
+
+    await expect(
+      resolveStatusGatewayMemoryRuntimeSafe({
+        config: { gateway: {} },
+        timeoutMs: 1234,
+        gatewayReachable: true,
+      }),
+    ).resolves.toEqual({
+      checked: true,
+      ok: true,
+      provider: "memory-lancedb",
+      embedding: { ok: false, error: "embedding credentials unavailable" },
+    });
+    expect(mocks.callGateway).toHaveBeenCalledWith({
+      method: "doctor.memory.status",
+      timeoutMs: 1234,
+      config: { gateway: {} },
+    });
+  });
+
+  it("skips gateway memory runtime when the gateway is unreachable", async () => {
+    await expect(
+      resolveStatusGatewayMemoryRuntimeSafe({
+        config: { gateway: {} },
+        gatewayReachable: false,
+      }),
+    ).resolves.toBeNull();
+    expect(mocks.callGateway).not.toHaveBeenCalled();
   });
 
   it("resolves shared runtime details with optional usage and deep fields", async () => {

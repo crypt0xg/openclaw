@@ -110,6 +110,10 @@ type DoctorMemoryDreamingPayload = {
 export type DoctorMemoryStatusPayload = {
   agentId: string;
   provider?: string;
+  runtime: {
+    ok: boolean;
+    error?: string;
+  };
   embedding: {
     ok: boolean;
     error?: string;
@@ -793,6 +797,10 @@ export const doctorHandlers: GatewayRequestHandlers = {
     if (!manager) {
       const payload: DoctorMemoryStatusPayload = {
         agentId,
+        runtime: {
+          ok: false,
+          error: error ?? "memory search unavailable",
+        },
         embedding: {
           ok: false,
           error: error ?? "memory search unavailable",
@@ -804,7 +812,15 @@ export const doctorHandlers: GatewayRequestHandlers = {
 
     try {
       const status = manager.status();
-      let embedding = await manager.probeEmbeddingAvailability();
+      let embedding: DoctorMemoryStatusPayload["embedding"];
+      try {
+        embedding = await manager.probeEmbeddingAvailability();
+      } catch (err) {
+        embedding = {
+          ok: false,
+          error: `gateway memory probe failed: ${formatError(err)}`,
+        };
+      }
       if (!embedding.ok && !embedding.error) {
         embedding = { ok: false, error: "memory embeddings unavailable" };
       }
@@ -841,6 +857,7 @@ export const doctorHandlers: GatewayRequestHandlers = {
       const payload: DoctorMemoryStatusPayload = {
         agentId,
         provider: status.provider,
+        runtime: { ok: true },
         embedding,
         dreaming: {
           ...dreamingConfig,
@@ -865,6 +882,10 @@ export const doctorHandlers: GatewayRequestHandlers = {
     } catch (err) {
       const payload: DoctorMemoryStatusPayload = {
         agentId,
+        runtime: {
+          ok: false,
+          error: `gateway memory runtime failed: ${formatError(err)}`,
+        },
         embedding: {
           ok: false,
           error: `gateway memory probe failed: ${formatError(err)}`,

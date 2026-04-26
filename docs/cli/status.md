@@ -21,6 +21,7 @@ Notes:
 
 - `--deep` runs live probes (WhatsApp Web + Telegram + Discord + Slack + Signal).
 - `--usage` prints normalized provider usage windows as `X% left`.
+- Memory status can report gateway runtime readiness separately from embedding probe health, so a reachable live memory plugin is not shown as unavailable just because the CLI could not build a local memory index snapshot.
 - Session status output separates `Execution:` from `Runtime:`. `Execution` is the sandbox path (`direct`, `docker/*`), while `Runtime` tells you whether the session is using `OpenClaw Pi Default`, `OpenAI Codex`, a CLI backend, or an ACP backend such as `codex (acp/acpx)`. See [Agent runtimes](/concepts/agent-runtimes) for the provider/model/runtime distinction.
 - MiniMax's raw `usage_percent` / `usagePercent` fields are remaining quota, so OpenClaw inverts them before display; count-based fields win when present. `model_remains` responses prefer the chat-model entry, derive the window label from timestamps when needed, and include the model name in the plan label.
 - When the current session snapshot is sparse, `/status` can backfill token and cache counters from the most recent transcript usage log. Existing nonzero live values still win over transcript fallback values.

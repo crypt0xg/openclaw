@@ -2,7 +2,10 @@ import type { OpenClawConfig } from "../config/types.js";
 import type { UpdateCheckResult } from "../infra/update-check.js";
 import { buildStatusJsonPayload } from "./status-json-payload.ts";
 import { buildStatusOverviewSurfaceFromScan } from "./status-overview-surface.ts";
-import { resolveStatusRuntimeSnapshot } from "./status-runtime-shared.ts";
+import {
+  resolveStatusGatewayMemoryRuntimeSafe,
+  resolveStatusRuntimeSnapshot,
+} from "./status-runtime-shared.ts";
 
 type StatusJsonScanLike = {
   cfg: OpenClawConfig;
@@ -12,6 +15,11 @@ type StatusJsonScanLike = {
   osSummary: unknown;
   memory: unknown;
   memoryPlugin: unknown;
+  gatewayCallOverrides?: {
+    url: string;
+    token?: string;
+    password?: string;
+  };
   gatewayMode: "local" | "remote";
   gatewayConnection: {
     url: string;
@@ -54,6 +62,7 @@ export async function resolveStatusJsonOutput(params: {
     deep?: boolean;
     usage?: boolean;
     timeoutMs?: number;
+    all?: boolean;
   };
   includeSecurityAudit: boolean;
   includePluginCompatibility?: boolean;
@@ -71,6 +80,22 @@ export async function resolveStatusJsonOutput(params: {
       includeSecurityAudit: params.includeSecurityAudit,
       suppressHealthErrors: params.suppressHealthErrors,
     });
+  const memoryPlugin =
+    scan.memoryPlugin &&
+    typeof scan.memoryPlugin === "object" &&
+    "enabled" in scan.memoryPlugin &&
+    scan.memoryPlugin.enabled === true
+      ? scan.memoryPlugin
+      : null;
+  const memoryRuntime =
+    !opts.all || scan.memory || !memoryPlugin
+      ? null
+      : await resolveStatusGatewayMemoryRuntimeSafe({
+          config: scan.cfg,
+          timeoutMs: opts.timeoutMs,
+          gatewayReachable: scan.gatewayReachable,
+          callOverrides: scan.gatewayCallOverrides,
+        });
 
   return buildStatusJsonPayload({
     summary: scan.summary,
@@ -82,6 +107,7 @@ export async function resolveStatusJsonOutput(params: {
     osSummary: scan.osSummary,
     memory: scan.memory,
     memoryPlugin: scan.memoryPlugin,
+    memoryRuntime,
     agents: scan.agentStatus,
     secretDiagnostics: scan.secretDiagnostics,
     securityAudit,

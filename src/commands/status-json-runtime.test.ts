@@ -3,6 +3,7 @@ import { resolveStatusJsonOutput } from "./status-json-runtime.ts";
 
 const mocks = vi.hoisted(() => ({
   buildStatusJsonPayload: vi.fn((input) => ({ built: true, input })),
+  resolveStatusGatewayMemoryRuntimeSafe: vi.fn(),
   resolveStatusRuntimeSnapshot: vi.fn(),
 }));
 
@@ -11,6 +12,7 @@ vi.mock("./status-json-payload.ts", () => ({
 }));
 
 vi.mock("./status-runtime-shared.ts", () => ({
+  resolveStatusGatewayMemoryRuntimeSafe: mocks.resolveStatusGatewayMemoryRuntimeSafe,
   resolveStatusRuntimeSnapshot: mocks.resolveStatusRuntimeSnapshot,
 }));
 

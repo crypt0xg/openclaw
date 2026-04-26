@@ -6,6 +6,7 @@ Docs: https://docs.openclaw.ai
 
 ### Fixes
 
+- Status/memory: report gateway-backed memory runtime readiness separately from embedding probe health so healthy live memory plugins are not shown as unavailable when the CLI cannot build a local memory snapshot. Fixes #57256 and carries forward #59685. Thanks @luoxiao6645.
 - Auto-reply: poison inbound message dedupe after replay-unsafe provider/runtime failures so retries stay safe before visible progress but cannot duplicate messages after block output, tool side effects, or session progress. Fixes #69303; keeps #58549 and #64606 as duplicate validation. Thanks @martingarramon, @NikolaFC, and @zeroth-blip.
 - Agents/model fallback: jump directly to a known later live-session model redirect instead of walking unrelated fallback candidates, while preserving the already-landed live-session/fallback loop guard. Fixes #57471; related loop family already closed via #58496. Thanks @yuxiaoyang2007-prog.
 - Gateway/Bonjour: keep @homebridge/ciao cancellation handlers registered across advertiser restarts so late probing cancellations cannot crash Linux and other mDNS-churned gateways. Thanks @codex.

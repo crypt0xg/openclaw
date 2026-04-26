@@ -1,8 +1,10 @@
 import { resolveReadOnlyChannelPluginsForConfig } from "../channels/plugins/read-only.js";
 import type { OpenClawConfig } from "../config/types.js";
+import type { DoctorMemoryStatusPayload } from "../gateway/server-methods/doctor.js";
 import type { HeartbeatEventPayload } from "../infra/heartbeat-events.js";
 import type { HealthSummary } from "./health.js";
 import { getDaemonStatusSummary, getNodeDaemonStatusSummary } from "./status.daemon.js";
+import type { MemoryRuntimeStatusSnapshot } from "./status.scan.shared.js";
 
 let providerUsagePromise: Promise<typeof import("../infra/provider-usage.js")> | undefined;
 let securityAuditModulePromise: Promise<typeof import("../security/audit.runtime.js")> | undefined;
@@ -89,6 +91,47 @@ export async function resolveStatusGatewayHealthSafe(params: {
     config: params.config,
     ...params.callOverrides,
   }).catch((err) => ({ error: String(err) }));
+}
+
+export async function resolveStatusGatewayMemoryRuntimeSafe(params: {
+  config: OpenClawConfig;
+  timeoutMs?: number;
+  gatewayReachable: boolean;
+  callOverrides?: {
+    url: string;
+    token?: string;
+    password?: string;
+  };
+}): Promise<MemoryRuntimeStatusSnapshot | null> {
+  if (!params.gatewayReachable) {
+    return null;
+  }
+  const { callGateway } = await loadGatewayCallModule();
+  try {
+    const payload = await callGateway<DoctorMemoryStatusPayload>({
+      method: "doctor.memory.status",
+      timeoutMs: params.timeoutMs,
+      config: params.config,
+      ...params.callOverrides,
+    });
+    const runtime = payload.runtime ?? {
+      ok: payload.embedding.ok,
+      error: payload.embedding.error,
+    };
+    return {
+      checked: true,
+      ok: runtime.ok,
+      ...(payload.provider ? { provider: payload.provider } : {}),
+      ...(runtime.error ? { error: runtime.error } : {}),
+      embedding: payload.embedding,
+    };
+  } catch (err) {
+    return {
+      checked: true,
+      ok: false,
+      error: String(err),
+    };
+  }
 }
 
 export async function resolveStatusLastHeartbeat(params: {

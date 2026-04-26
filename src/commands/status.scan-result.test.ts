@@ -129,6 +129,7 @@ describe("buildStatusScanResult", () => {
       gatewayProbe: gatewaySnapshot.gatewayProbe,
       gatewayReachable: gatewaySnapshot.gatewayReachable,
       gatewaySelf: gatewaySnapshot.gatewaySelf,
+      gatewayCallOverrides: undefined,
       channelIssues,
       agentStatus,
       channels,
