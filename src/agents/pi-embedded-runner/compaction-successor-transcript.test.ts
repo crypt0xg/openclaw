@@ -8,6 +8,7 @@ import {
   rotateTranscriptAfterCompaction,
   shouldRotateCompactionTranscript,
 } from "./compaction-successor-transcript.js";
+import { hardenManualCompactionBoundary } from "./manual-compaction-boundary.js";
 
 let tmpDir: string | undefined;
 
@@ -115,6 +116,51 @@ describe("rotateTranscriptAfterCompaction", () => {
     expect(result).toMatchObject({
       rotated: false,
       reason: "no compaction entry",
+    });
+  });
+
+  it("uses a refreshed manager after manual boundary hardening", async () => {
+    const dir = await createTmpDir();
+    const manager = SessionManager.create(dir, dir);
+    manager.appendMessage({ role: "user", content: "old question", timestamp: 1 });
+    manager.appendMessage(makeAssistant("old answer", 2));
+    const recentTailId = manager.appendMessage({
+      role: "user",
+      content: "recent question",
+      timestamp: 3,
+    });
+    manager.appendMessage(makeAssistant("detailed recent answer", 4));
+    const compactionId = manager.appendCompaction("fresh manual summary", recentTailId, 200);
+    const sessionFile = manager.getSessionFile();
+    expect(sessionFile).toBeTruthy();
+    const staleManager = SessionManager.open(sessionFile!);
+
+    const hardened = await hardenManualCompactionBoundary({ sessionFile: sessionFile! });
+    expect(hardened.applied).toBe(true);
+    const staleLeaf = staleManager.getLeafEntry();
+    expect(staleLeaf?.type).toBe("compaction");
+    if (!staleLeaf || staleLeaf.type !== "compaction") {
+      throw new Error("expected stale leaf to be a compaction entry");
+    }
+    expect(staleLeaf.firstKeptEntryId).toBe(recentTailId);
+
+    const result = await rotateTranscriptAfterCompaction({
+      sessionManager: SessionManager.open(sessionFile!),
+      sessionFile: sessionFile!,
+      now: () => new Date("2026-04-27T12:30:00.000Z"),
+    });
+
+    expect(result.rotated).toBe(true);
+    const successor = SessionManager.open(result.sessionFile!);
+    const successorText = JSON.stringify(successor.buildSessionContext().messages);
+    expect(successorText).toContain("fresh manual summary");
+    expect(successorText).not.toContain("recent question");
+    expect(successorText).not.toContain("detailed recent answer");
+    const successorCompaction = successor
+      .getEntries()
+      .find((entry) => entry.type === "compaction" && entry.id === compactionId);
+    expect(successorCompaction).toMatchObject({
+      firstKeptEntryId: compactionId,
     });
   });
 });

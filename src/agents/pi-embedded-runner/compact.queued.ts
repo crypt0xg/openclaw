@@ -242,6 +242,10 @@ export async function compactEmbeddedPiSession(
           hookRunner.runAfterCompaction
         ) {
           try {
+            const afterHookCtx = {
+              ...hookCtx,
+              sessionId: postCompactionSessionId,
+            };
             await hookRunner.runAfterCompaction(
               {
                 messageCount: -1,
@@ -249,7 +253,7 @@ export async function compactEmbeddedPiSession(
                 tokenCount: result.result?.tokensAfter,
                 sessionFile: postCompactionSessionFile,
               },
-              hookCtx,
+              afterHookCtx,
             );
           } catch (err) {
             log.warn("after_compaction hook failed", {

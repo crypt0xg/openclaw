@@ -1083,6 +1083,7 @@ export async function compactEmbeddedPiSessionDirect(
             typeof sessionManager.getLeafId === "function"
               ? (sessionManager.getLeafId() ?? undefined)
               : undefined;
+          let transcriptRotationSessionManager = sessionManager;
           if (params.trigger === "manual") {
             try {
               const hardenedBoundary = await hardenManualCompactionBoundary({
@@ -1095,6 +1096,7 @@ export async function compactEmbeddedPiSessionDirect(
                   hardenedBoundary.firstKeptEntryId ?? effectiveFirstKeptEntryId;
                 postCompactionLeafId = hardenedBoundary.leafId ?? postCompactionLeafId;
                 session.agent.state.messages = hardenedBoundary.messages;
+                transcriptRotationSessionManager = SessionManager.open(params.sessionFile);
               }
             } catch (err) {
               log.warn("[compaction] failed to harden manual compaction boundary", {
@@ -1115,7 +1117,7 @@ export async function compactEmbeddedPiSessionDirect(
           if (shouldRotateCompactionTranscript(params.config)) {
             try {
               transcriptRotation = await rotateTranscriptAfterCompaction({
-                sessionManager,
+                sessionManager: transcriptRotationSessionManager,
                 sessionFile: params.sessionFile,
               });
             } catch (err) {
