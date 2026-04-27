@@ -110,7 +110,7 @@ describe("applyCustomApiConfig", () => {
     },
     {
       name: "upgrades existing custom model context window when below hard minimum",
-      existingContextWindow: 4096,
+      existingContextWindow: 2048,
       expectedContextWindow: CONTEXT_WINDOW_HARD_MIN_TOKENS,
     },
     {

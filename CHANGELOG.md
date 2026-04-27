@@ -15,6 +15,7 @@ Docs: https://docs.openclaw.ai
 
 ### Fixes
 
+- Agents/local models: derive context-window guard thresholds from the effective model window with 4k/8k safety floors, so small local models are no longer rejected by fixed 16k/32k preflight cutoffs. Fixes #42999. Thanks @chengjialu8888.
 - ACP/runtime: harden the opt-in Coven backend with workspace-confined launch paths, home-expanded Coven socket config, bounded socket responses, sanitized daemon output, and controlled polling failure handling. Thanks @BunsDev.
 
 ## 2026.4.26
