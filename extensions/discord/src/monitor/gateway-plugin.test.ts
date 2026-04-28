@@ -2,8 +2,9 @@ import { EventEmitter } from "node:events";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { DISCORD_GATEWAY_TRANSPORT_ACTIVITY_EVENT } from "./gateway-handle.js";
 
-const { baseConnectSpy, GatewayIntents, GatewayPlugin } = vi.hoisted(() => {
+const { baseConnectSpy, fetchWithSsrFGuardMock, GatewayIntents, GatewayPlugin } = vi.hoisted(() => {
   const baseConnectSpy = vi.fn<(resume: boolean) => void>();
+  const fetchWithSsrFGuardMock = vi.fn();
 
   const GatewayIntents = {
     Guilds: 1 << 0,
@@ -53,7 +54,7 @@ const { baseConnectSpy, GatewayIntents, GatewayPlugin } = vi.hoisted(() => {
     }
   }
 
-  return { baseConnectSpy, GatewayIntents, GatewayPlugin };
+  return { baseConnectSpy, fetchWithSsrFGuardMock, GatewayIntents, GatewayPlugin };
 });
 
 vi.mock("@buape/carbon/gateway", () => ({ GatewayIntents, GatewayPlugin }));
@@ -74,6 +75,10 @@ vi.mock("openclaw/plugin-sdk/runtime-env", () => ({
   danger: (value: string) => value,
 }));
 
+vi.mock("openclaw/plugin-sdk/ssrf-runtime", () => ({
+  fetchWithSsrFGuard: fetchWithSsrFGuardMock,
+}));
+
 describe("SafeGatewayPlugin.connect()", () => {
   let createDiscordGatewayPlugin: typeof import("./gateway-plugin.js").createDiscordGatewayPlugin;
   let resolveDiscordGatewayIntents: typeof import("./gateway-plugin.js").resolveDiscordGatewayIntents;
@@ -89,6 +94,7 @@ describe("SafeGatewayPlugin.connect()", () => {
 
   beforeEach(() => {
     baseConnectSpy.mockClear();
+    fetchWithSsrFGuardMock.mockReset();
   });
 
   it("includes GuildVoiceStates when voice is enabled by default", () => {
@@ -240,6 +246,40 @@ describe("SafeGatewayPlugin.connect()", () => {
       (plugin as unknown as { options?: { gatewayInfoTimeoutMs?: number } }).options
         ?.gatewayInfoTimeoutMs,
     ).toBeUndefined();
+  });
+
+  it("uses default gateway metadata for Cloudflare HTML rate limits without logging raw HTML", async () => {
+    fetchWithSsrFGuardMock.mockResolvedValueOnce({
+      response: new Response("<html><title>Error 1015</title><body>rate limited</body></html>", {
+        status: 429,
+        headers: { "content-type": "text/html" },
+      }),
+      release: vi.fn(),
+    });
+    const runtime = {
+      log: vi.fn(),
+      error: vi.fn(),
+      exit: vi.fn(),
+    };
+    const registerClient = vi.fn();
+    const plugin = createDiscordGatewayPlugin({
+      discordConfig: {},
+      runtime,
+      __testing: { registerClient },
+    });
+
+    await plugin.registerClient({ options: { token: "test" } } as Parameters<
+      typeof plugin.registerClient
+    >[0]);
+
+    expect(registerClient).toHaveBeenCalled();
+    expect((plugin as unknown as { gatewayInfo?: { url?: string } }).gatewayInfo?.url).toBe(
+      "wss://gateway.discord.gg/",
+    );
+    const logs = runtime.log.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(logs).toContain("gateway metadata lookup failed transiently");
+    expect(logs).toContain("Error 1015");
+    expect(logs).not.toContain("<html");
   });
 
   it("clears stale firstHeartbeatTimeout before delegating to super when isConnecting=true", () => {

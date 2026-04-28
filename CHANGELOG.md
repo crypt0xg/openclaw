@@ -13,6 +13,7 @@ Docs: https://docs.openclaw.ai
 
 ### Fixes
 
+- Channels/Discord: cool down Cloudflare/Error 1015 HTML 429 REST failures during startup application lookup and allowlist guild fetches, sanitizing HTML bodies and honoring Retry-After before falling back to a conservative cooldown. Fixes #38853; refs #58173. Thanks @djgeorg3 and @Garyko0730.
 - Gateway/shutdown: report structured shutdown warnings and HTTP close timeout warnings through `ShutdownResult` while preserving lifecycle hook hardening. Carries forward #41296. Thanks @edenfunf.
 - Security/audit: recognize dangerous node command IDs as valid `gateway.nodes.denyCommands` entries, so audit only warns on real typos or unsupported patterns. (#56923) Thanks @chziyue.
 - Telegram/exec approvals: stop treating general Telegram chat allowlists and `defaultTo` routes as native exec approvers; Telegram now uses explicit `execApprovals.approvers` or owner identity from `commands.ownerAllowFrom`, matching the first-pairing owner bootstrap path. Thanks @pashpashpash.
