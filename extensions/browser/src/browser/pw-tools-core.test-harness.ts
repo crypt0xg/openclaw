@@ -74,6 +74,10 @@ export function setPwToolsCoreCurrentRefLocator(locator: Record<string, unknown>
   currentRefLocator = locator;
 }
 
+export function getPwToolsCorePageState() {
+  return pageState;
+}
+
 export function installPwToolsCoreTestHooks() {
   beforeEach(() => {
     currentPage = null;

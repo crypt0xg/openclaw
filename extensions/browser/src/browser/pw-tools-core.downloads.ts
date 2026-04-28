@@ -27,10 +27,15 @@ function buildTempDownloadPath(fileName: string): string {
   return path.join(resolvePreferredOpenClawTmpDir(), "downloads", `${id}-${safeName}`);
 }
 
-function createPageDownloadWaiter(page: Page, timeoutMs: number) {
+function createPageDownloadWaiter(
+  page: Page,
+  state: ReturnType<typeof ensurePageState>,
+  timeoutMs: number,
+) {
   let done = false;
   let timer: NodeJS.Timeout | undefined;
   let handler: ((download: unknown) => void) | undefined;
+  state.downloadWaiterDepth += 1;
 
   const cleanup = () => {
     if (timer) {
@@ -40,6 +45,9 @@ function createPageDownloadWaiter(page: Page, timeoutMs: number) {
     if (handler) {
       page.off("download", handler as never);
       handler = undefined;
+    }
+    if (state.downloadWaiterDepth > 0) {
+      state.downloadWaiterDepth -= 1;
     }
   };
 
@@ -90,9 +98,9 @@ async function saveDownloadPayload(
   const suggested = download.suggestedFilename?.() || "download.bin";
   const requestedPath = outPath?.trim();
   const resolvedOutPath = path.resolve(requestedPath || buildTempDownloadPath(suggested));
-  await fs.mkdir(path.dirname(resolvedOutPath), { recursive: true });
 
   if (!requestedPath) {
+    await fs.mkdir(path.dirname(resolvedOutPath), { recursive: true });
     await download.saveAs?.(resolvedOutPath);
   } else {
     await writeViaSiblingTempPath({
@@ -241,7 +249,7 @@ export async function waitForDownloadViaPlaywright(opts: {
   state.armIdDownload = bumpDownloadArmId();
   const armId = state.armIdDownload;
 
-  const waiter = createPageDownloadWaiter(page, timeout);
+  const waiter = createPageDownloadWaiter(page, state, timeout);
   return await awaitDownloadPayload({
     waiter,
     state,
@@ -277,7 +285,7 @@ export async function downloadViaPlaywright(opts: {
   state.armIdDownload = bumpDownloadArmId();
   const armId = state.armIdDownload;
 
-  const waiter = createPageDownloadWaiter(page, timeout);
+  const waiter = createPageDownloadWaiter(page, state, timeout);
   try {
     const locator = refLocator(page, ref);
     try {

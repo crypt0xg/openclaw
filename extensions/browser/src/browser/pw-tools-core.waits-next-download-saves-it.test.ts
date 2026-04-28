@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  getPwToolsCorePageState,
   getPwToolsCoreSessionMocks,
   installPwToolsCoreTestHooks,
   setPwToolsCoreCurrentPage,
@@ -143,6 +144,7 @@ describe("pw-tools-core", () => {
     await withTempDir(async (tempDir) => {
       const harness = createDownloadEventHarness();
       const targetPath = path.join(tempDir, "file.bin");
+      const pageState = getPwToolsCorePageState();
 
       const saveAs = vi.fn(async (outPath: string) => {
         await fs.writeFile(outPath, "file-content", "utf8");
@@ -162,9 +164,11 @@ describe("pw-tools-core", () => {
 
       await Promise.resolve();
       harness.expectArmed();
+      expect(pageState.downloadWaiterDepth).toBe(1);
       harness.trigger(download);
 
       const res = await p;
+      expect(pageState.downloadWaiterDepth).toBe(0);
       await expectAtomicDownloadSave({ saveAs, targetPath, tempDir, content: "file-content" });
       await expect(fs.realpath(res.path)).resolves.toBe(await fs.realpath(targetPath));
     });
@@ -238,6 +242,7 @@ describe("pw-tools-core", () => {
 
       await expect(p).rejects.toThrow(/downloads directory|allowed root|outside/i);
       await expect(fs.stat(outsidePath)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(fs.stat(path.dirname(outsidePath))).rejects.toMatchObject({ code: "ENOENT" });
     });
   });
 

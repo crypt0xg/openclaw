@@ -136,6 +136,23 @@ describe("pw-session role refs cache", () => {
 });
 
 describe("pw-session ensurePageState", () => {
+  it("does not manage downloads while an explicit download waiter is active", async () => {
+    const { page, handlers } = fakePage();
+    vi.spyOn(fs, "mkdir").mockResolvedValue(undefined);
+    const state = ensurePageState(page);
+    state.downloadWaiterDepth = 1;
+
+    const download: MutableDownload = {
+      suggestedFilename: () => "report.pdf",
+      saveAs: vi.fn(async () => {}),
+    };
+
+    handlers.get("download")?.[0]?.(download);
+
+    expect(download.saveAs).not.toHaveBeenCalled();
+    expect(download.path).toBeUndefined();
+  });
+
   it("stores unmanaged downloads under unique managed paths", async () => {
     const { page, handlers } = fakePage();
     const mkdirSpy = vi.spyOn(fs, "mkdir").mockResolvedValue(undefined);
