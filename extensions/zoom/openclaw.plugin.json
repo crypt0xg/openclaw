@@ -1,0 +1,384 @@
+{
+  "id": "zoom",
+  "name": "Zoom",
+  "description": "Join Zoom meetings through Chrome transports.",
+  "enabledByDefault": false,
+  "commandAliases": [{ "name": "zoom" }],
+  "activation": {
+    "onStartup": true,
+    "onCommands": ["zoom"],
+    "onCapabilities": ["tool"]
+  },
+  "uiHints": {
+    "defaults.meeting": {
+      "label": "Default Meeting",
+      "help": "Zoom URL used when commands omit a meeting."
+    },
+    "defaultTransport": {
+      "label": "Default Transport",
+      "help": "Chrome uses a local browser profile. Chrome-node runs Chrome on a paired node."
+    },
+    "defaultMode": {
+      "label": "Default Mode",
+      "help": "Realtime voice is the default. Conversation uses native STT/TTS with Zoom-owned VAD."
+    },
+    "chrome.audioBackend": {
+      "label": "Chrome Audio Backend",
+      "help": "BlackHole 2ch is required for local duplex audio routing."
+    },
+    "chrome.launch": {
+      "label": "Launch Chrome"
+    },
+    "chrome.browserProfile": {
+      "label": "Chrome Profile",
+      "advanced": true
+    },
+    "chrome.guestName": {
+      "label": "Guest Name",
+      "help": "Used when Zoom asks for a display name."
+    },
+    "chrome.reuseExistingTab": {
+      "label": "Reuse Existing Zoom Tab",
+      "help": "Avoids opening duplicate tabs for the same Zoom URL."
+    },
+    "chrome.autoJoin": {
+      "label": "Auto Join Browser Flow",
+      "help": "Best-effort Join from Browser, display-name fill, and Join click through OpenClaw browser automation."
+    },
+    "chrome.waitForInCallMs": {
+      "label": "Wait For In-Call (ms)",
+      "help": "Waits for Chrome to report that the Zoom tab is in-call before the realtime intro speaks.",
+      "advanced": true
+    },
+    "chrome.audioInputCommand": {
+      "label": "Audio Input Command",
+      "help": "Command that writes meeting audio to stdout in chrome.audioFormat.",
+      "advanced": true
+    },
+    "chrome.audioOutputCommand": {
+      "label": "Audio Output Command",
+      "help": "Command that reads assistant audio from stdin in chrome.audioFormat.",
+      "advanced": true
+    },
+    "chrome.audioFormat": {
+      "label": "Audio Format",
+      "help": "Command-pair audio format. PCM16 24 kHz is the default Chrome/Zoom path; G.711 mu-law 8 kHz remains available for legacy command pairs.",
+      "advanced": true
+    },
+    "chrome.audioBridgeCommand": {
+      "label": "Audio Bridge Command",
+      "advanced": true
+    },
+    "chrome.audioBridgeHealthCommand": {
+      "label": "Audio Bridge Health Command",
+      "advanced": true
+    },
+    "conversation.agentId": {
+      "label": "Conversation Agent",
+      "help": "OpenClaw agent id used by native conversation mode. Defaults to realtime.agentId or main.",
+      "advanced": true
+    },
+    "conversation.instructions": {
+      "label": "Conversation Instructions",
+      "help": "Extra guidance for short native STT/TTS Zoom replies.",
+      "advanced": true
+    },
+    "conversation.playbackCommand": {
+      "label": "Conversation Playback Command",
+      "help": "Command that plays a synthesized audio file into the Zoom microphone route. Supports {{AudioPath}}.",
+      "advanced": true
+    },
+    "conversation.vad.rmsThreshold": {
+      "label": "Conversation VAD RMS Threshold",
+      "help": "RMS level that starts an utterance in native conversation mode.",
+      "advanced": true
+    },
+    "conversation.vad.silenceMs": {
+      "label": "Conversation Silence Window (ms)",
+      "help": "Silence duration that commits an utterance for transcription.",
+      "advanced": true
+    },
+    "chromeNode.node": {
+      "label": "Chrome Node",
+      "help": "Node id/name/IP that owns Chrome, BlackHole, and SoX for chrome-node transport.",
+      "advanced": true
+    },
+    "realtime.provider": {
+      "label": "Realtime Provider",
+      "help": "Defaults to OpenAI; uses OPENAI_API_KEY when no provider config is set."
+    },
+    "realtime.model": {
+      "label": "Realtime Model",
+      "advanced": true
+    },
+    "realtime.instructions": {
+      "label": "Realtime Instructions",
+      "advanced": true
+    },
+    "realtime.introMessage": {
+      "label": "Realtime Intro Message",
+      "help": "Spoken once when the realtime bridge is ready. Set to an empty string to join silently."
+    },
+    "realtime.agentId": {
+      "label": "Realtime Consult Agent",
+      "help": "OpenClaw agent id used by openclaw_agent_consult. Defaults to \"main\".",
+      "advanced": true
+    },
+    "realtime.toolPolicy": {
+      "label": "Realtime Tool Policy",
+      "help": "Safe read-only tools are available by default; owner requests can unlock broader tools.",
+      "advanced": true
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean"
+      },
+      "defaults": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "meeting": {
+            "type": "string"
+          }
+        }
+      },
+      "defaultTransport": {
+        "type": "string",
+        "enum": ["chrome", "chrome-node"],
+        "default": "chrome"
+      },
+      "defaultMode": {
+        "type": "string",
+        "enum": ["realtime", "conversation", "transcribe"],
+        "default": "realtime"
+      },
+      "chrome": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "audioBackend": {
+            "type": "string",
+            "enum": ["blackhole-2ch"],
+            "default": "blackhole-2ch"
+          },
+          "launch": {
+            "type": "boolean",
+            "default": true
+          },
+          "browserProfile": {
+            "type": "string"
+          },
+          "guestName": {
+            "type": "string",
+            "default": "OpenClaw Agent"
+          },
+          "reuseExistingTab": {
+            "type": "boolean",
+            "default": true
+          },
+          "autoJoin": {
+            "type": "boolean",
+            "default": true
+          },
+          "joinTimeoutMs": {
+            "type": "number",
+            "default": 30000
+          },
+          "waitForInCallMs": {
+            "type": "number",
+            "default": 20000
+          },
+          "audioFormat": {
+            "type": "string",
+            "enum": ["pcm16-24khz", "g711-ulaw-8khz"],
+            "default": "pcm16-24khz"
+          },
+          "audioInputCommand": {
+            "type": "array",
+            "default": [
+              "sox",
+              "-q",
+              "-t",
+              "coreaudio",
+              "BlackHole 2ch",
+              "-t",
+              "raw",
+              "-r",
+              "24000",
+              "-c",
+              "1",
+              "-e",
+              "signed-integer",
+              "-b",
+              "16",
+              "-L",
+              "-"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "audioOutputCommand": {
+            "type": "array",
+            "default": [
+              "sox",
+              "-q",
+              "-t",
+              "raw",
+              "-r",
+              "24000",
+              "-c",
+              "1",
+              "-e",
+              "signed-integer",
+              "-b",
+              "16",
+              "-L",
+              "-",
+              "-t",
+              "coreaudio",
+              "BlackHole 2ch"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "audioBridgeCommand": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "audioBridgeHealthCommand": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "conversation": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "agentId": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "instructions": {
+            "type": "string",
+            "default": "Reply naturally in one short spoken answer for the Zoom participant."
+          },
+          "introMessage": {
+            "type": "string",
+            "default": "I'm here and listening."
+          },
+          "playbackCommand": {
+            "type": "array",
+            "default": ["sox", "-q", "{{AudioPath}}", "-t", "coreaudio", "BlackHole 2ch"],
+            "items": {
+              "type": "string"
+            }
+          },
+          "halfDuplex": {
+            "type": "boolean",
+            "default": true
+          },
+          "echoSuppressionMs": {
+            "type": "number",
+            "default": 700
+          },
+          "minTranscriptChars": {
+            "type": "number",
+            "default": 2
+          },
+          "ttsTimeoutMs": {
+            "type": "number",
+            "default": 120000
+          },
+          "vad": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "rmsThreshold": {
+                "type": "number",
+                "default": 0.003
+              },
+              "minSpeechMs": {
+                "type": "number",
+                "default": 250
+              },
+              "silenceMs": {
+                "type": "number",
+                "default": 700
+              },
+              "maxUtteranceMs": {
+                "type": "number",
+                "default": 15000
+              },
+              "preSpeechMs": {
+                "type": "number",
+                "default": 250
+              }
+            }
+          }
+        }
+      },
+      "chromeNode": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "node": {
+            "type": "string"
+          }
+        }
+      },
+      "realtime": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "provider": {
+            "type": "string",
+            "default": "openai"
+          },
+          "model": {
+            "type": "string"
+          },
+          "instructions": {
+            "type": "string",
+            "default": "You are joining a private Zoom meeting as an OpenClaw agent. Keep spoken replies brief and natural. When a question needs deeper reasoning, current information, or tools, call openclaw_agent_consult before answering."
+          },
+          "introMessage": {
+            "type": "string",
+            "default": "Say exactly: I'm here and listening."
+          },
+          "agentId": {
+            "type": "string",
+            "description": "OpenClaw agent id used by openclaw_agent_consult. Defaults to \"main\"."
+          },
+          "toolPolicy": {
+            "type": "string",
+            "enum": ["safe-read-only", "owner", "none"],
+            "default": "safe-read-only"
+          },
+          "providers": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        }
+      }
+    }
+  }
+}
