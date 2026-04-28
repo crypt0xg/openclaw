@@ -106,6 +106,23 @@ function escapeRegex(str: string): string {
 
 const AUTO_LINKED_ANCHOR_PATTERN = /<a\s+href="https?:\/\/([^"]+)"[^>]*>\1<\/a>/gi;
 const HTML_TAG_PATTERN = /(<\/?)([a-zA-Z][a-zA-Z0-9-]*)\b[^>]*?>/gi;
+const HTML_MODE_TAG_RE = /^<(\/?)([a-zA-Z][a-zA-Z0-9-]*)([^<>]*)>$/;
+const TELEGRAM_SIMPLE_HTML_TAGS = new Set([
+  "b",
+  "strong",
+  "i",
+  "em",
+  "u",
+  "ins",
+  "s",
+  "strike",
+  "del",
+  "code",
+  "pre",
+  "tg-spoiler",
+  "blockquote",
+]);
+const TELEGRAM_ATTR_HTML_TAGS = new Set(["a", "span", "tg-emoji", "tg-time"]);
 let fileReferencePattern: RegExp | undefined;
 let orphanedTldPattern: RegExp | undefined;
 
@@ -210,14 +227,107 @@ export function wrapFileReferencesInHtml(html: string): string {
   return result;
 }
 
+function isTelegramHtmlEntityAt(text: string, index: number): boolean {
+  const entityEnd = findTelegramHtmlEntityEnd(text, index);
+  if (entityEnd === -1) {
+    return false;
+  }
+  const entity = text.slice(index, entityEnd + 1).toLowerCase();
+  return (
+    /^&#(?:\d+|x[0-9a-f]+);$/i.test(entity) || ["&lt;", "&gt;", "&amp;", "&quot;"].includes(entity)
+  );
+}
+
+function isSupportedTelegramHtmlTag(rawTag: string): boolean {
+  const match = HTML_MODE_TAG_RE.exec(rawTag);
+  if (!match) {
+    return false;
+  }
+  const isClosing = match[1] === "/";
+  const tagName = normalizeLowercaseStringOrEmpty(match[2]);
+  const attrs = match[3]?.trim() ?? "";
+  if (TELEGRAM_SIMPLE_HTML_TAGS.has(tagName)) {
+    if (isClosing) {
+      return attrs.length === 0;
+    }
+    if (tagName === "blockquote") {
+      return attrs.length === 0 || attrs === "expandable";
+    }
+    if (tagName === "code") {
+      return attrs.length === 0 || /^class=(?:"language-[^"]+"|'language-[^']+')$/i.test(attrs);
+    }
+    return attrs.length === 0;
+  }
+  if (!TELEGRAM_ATTR_HTML_TAGS.has(tagName)) {
+    return false;
+  }
+  if (isClosing) {
+    return attrs.length === 0;
+  }
+  if (tagName === "a") {
+    return /^href=(?:"[^"]+"|'[^']+')$/i.test(attrs);
+  }
+  if (tagName === "span") {
+    return /^class=(?:"tg-spoiler"|'tg-spoiler')$/i.test(attrs);
+  }
+  if (tagName === "tg-emoji") {
+    return /^emoji-id=(?:"\d+"|'\d+')$/i.test(attrs);
+  }
+  return /^unix=(?:"\d+"|'\d+')(?:\s+format=(?:"[wWdDtTrRfF]+"|'[wWdDtTrRfF]+'))?$/i.test(attrs);
+}
+
+function escapeUnsupportedTelegramHtml(text: string): string {
+  let result = "";
+  let index = 0;
+  while (index < text.length) {
+    const char = text[index];
+    if (char === "&") {
+      if (isTelegramHtmlEntityAt(text, index)) {
+        const entityEnd = findTelegramHtmlEntityEnd(text, index);
+        result += text.slice(index, entityEnd + 1);
+        index = entityEnd + 1;
+      } else {
+        result += "&amp;";
+        index += 1;
+      }
+      continue;
+    }
+    if (char === "<") {
+      const next = text[index + 1] ?? "";
+      if (next !== "/" && !/[A-Za-z]/.test(next)) {
+        result += "&lt;";
+        index += 1;
+        continue;
+      }
+      const tagEnd = text.indexOf(">", index + 1);
+      if (tagEnd === -1) {
+        result += "&lt;";
+        index += 1;
+        continue;
+      }
+      const rawTag = text.slice(index, tagEnd + 1);
+      result += isSupportedTelegramHtmlTag(rawTag) ? rawTag : escapeHtml(rawTag);
+      index = tagEnd + 1;
+      continue;
+    }
+    if (char === ">") {
+      result += "&gt;";
+      index += 1;
+      continue;
+    }
+    result += char;
+    index += 1;
+  }
+  return result;
+}
+
 export function renderTelegramHtmlText(
   text: string,
   options: { textMode?: "markdown" | "html"; tableMode?: MarkdownTableMode } = {},
 ): string {
   const textMode = options.textMode ?? "markdown";
   if (textMode === "html") {
-    // For HTML mode, trust caller markup - don't modify
-    return text;
+    return escapeUnsupportedTelegramHtml(text);
   }
   // markdownToTelegramHtml already wraps file references by default
   return markdownToTelegramHtml(text, { tableMode: options.tableMode });

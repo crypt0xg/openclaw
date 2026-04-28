@@ -714,9 +714,10 @@ export async function sendMessageTelegram(
 
   const buildChunkedTextPlan = (rawText: string, context: string): TelegramTextChunk[] => {
     const fallbackText = opts.plainText ?? rawText;
+    const htmlSource = textMode === "html" ? renderHtmlText(rawText) : rawText;
     let htmlChunks: string[];
     try {
-      htmlChunks = splitTelegramHtmlChunks(rawText, 4000);
+      htmlChunks = splitTelegramHtmlChunks(htmlSource, 4000);
     } catch (error) {
       logVerbose(
         `telegram ${context} failed HTML chunk planning, retrying as plain text: ${formatErrorMessage(

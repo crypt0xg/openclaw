@@ -9,6 +9,13 @@ describe("splitTelegramReasoningText", () => {
     });
   });
 
+  it("keeps strict reasoning redaction for real tags before delivery escaping", () => {
+    expect(splitTelegramReasoningText("<think>secret</think>Visible <calc>42</calc>")).toEqual({
+      reasoningText: "Reasoning:\n_secret_",
+      answerText: "Visible <calc>42</calc>",
+    });
+  });
+
   it("ignores literal think tags inside inline code", () => {
     const text = "Use `<think>example</think>` literally.";
     expect(splitTelegramReasoningText(text)).toEqual({

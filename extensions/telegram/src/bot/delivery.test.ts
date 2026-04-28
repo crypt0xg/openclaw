@@ -489,6 +489,32 @@ describe("deliverReplies", () => {
     );
   });
 
+  it("escapes literal angle-bracket tags in media captions", async () => {
+    const runtime = createRuntime();
+    const sendPhoto = vi.fn().mockResolvedValue({
+      message_id: 2,
+      chat: { id: "123" },
+    });
+    const bot = createBot({ sendPhoto });
+
+    mockMediaLoad("photo.jpg", "image/jpeg", "image");
+
+    await deliverWith({
+      replies: [{ mediaUrl: "https://example.com/photo.jpg", text: "Result <calc>42</calc>" }],
+      runtime,
+      bot,
+    });
+
+    expect(sendPhoto).toHaveBeenCalledWith(
+      "123",
+      expect.anything(),
+      expect.objectContaining({
+        caption: "Result &lt;calc&gt;42&lt;/calc&gt;",
+        parse_mode: "HTML",
+      }),
+    );
+  });
+
   it("passes mediaLocalRoots to media loading", async () => {
     const runtime = createRuntime();
     const sendPhoto = vi.fn().mockResolvedValue({

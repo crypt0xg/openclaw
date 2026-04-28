@@ -1828,6 +1828,26 @@ describe("sendMessageTelegram", () => {
     expect(res.messageId).toBe("91");
   });
 
+  it("escapes unsupported literal tags before HTML-mode delivery", async () => {
+    const chatId = "123";
+    const sendMessage = vi.fn().mockResolvedValueOnce({ message_id: 92, chat: { id: chatId } });
+    const api = { sendMessage } as unknown as { sendMessage: typeof sendMessage };
+
+    const res = await sendMessageTelegram(chatId, "<b>Visible</b> <calc>42</calc>", {
+      cfg: TELEGRAM_TEST_CFG,
+      token: "tok",
+      api,
+      textMode: "html",
+    });
+
+    expect(sendMessage).toHaveBeenCalledWith(
+      chatId,
+      "<b>Visible</b> &lt;calc&gt;42&lt;/calc&gt;",
+      expect.objectContaining({ parse_mode: "HTML" }),
+    );
+    expect(res.messageId).toBe("92");
+  });
+
   it("preserves caller plain-text fallback across chunked html parse retries", async () => {
     const chatId = "123";
     const htmlText = `<b>${"A".repeat(5000)}</b>`;

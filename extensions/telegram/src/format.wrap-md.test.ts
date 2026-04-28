@@ -102,11 +102,20 @@ describe("renderTelegramHtmlText - file reference wrapping", () => {
     expect(result).toContain("<code>README.md</code>");
   });
 
-  it("does not wrap in HTML mode (trusts caller markup)", () => {
-    // textMode: "html" should pass through unchanged - caller owns the markup
+  it("does not wrap file references in HTML mode", () => {
     const result = renderTelegramHtmlText("Check README.md", { textMode: "html" });
     expect(result).toBe("Check README.md");
     expect(result).not.toContain("<code>");
+  });
+
+  it("escapes unsupported literal tags in HTML mode while preserving Telegram markup", () => {
+    const result = renderTelegramHtmlText(
+      '<b>Done</b> <think>literal</think> x < y & z <a href="https://example.com?a=1&amp;b=2">link</a>',
+      { textMode: "html" },
+    );
+    expect(result).toBe(
+      '<b>Done</b> &lt;think&gt;literal&lt;/think&gt; x &lt; y &amp; z <a href="https://example.com?a=1&amp;b=2">link</a>',
+    );
   });
 
   it("does not double-wrap already code-formatted content", () => {
