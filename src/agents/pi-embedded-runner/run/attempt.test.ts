@@ -838,6 +838,46 @@ describe("wrapStreamFnTrimToolCallNames", () => {
     expect(baseFn).toHaveBeenCalledTimes(1);
   });
 
+  it("promotes MiniMax XML tool calls before dispatch normalization", async () => {
+    const finalMessage = {
+      role: "assistant",
+      stopReason: "stop",
+      content: [
+        {
+          type: "text",
+          text: `<invoke name="Bash"><parameter name="command">echo &quot;ok&quot;</parameter></invoke></minimax:tool_call>`,
+        },
+      ],
+    };
+    const baseFn = vi.fn(() =>
+      createFakeStream({
+        events: [],
+        resultMessage: finalMessage,
+      }),
+    );
+
+    const stream = await invokeWrappedStream(baseFn, new Set(["exec"]));
+    const result = (await stream.result()) as {
+      stopReason?: string;
+      content: Array<{
+        type: string;
+        id?: string;
+        name?: string;
+        arguments?: Record<string, unknown>;
+      }>;
+    };
+
+    expect(result.stopReason).toBe("toolUse");
+    expect(result.content).toEqual([
+      {
+        type: "toolCall",
+        id: "call_minimax_xml_1",
+        name: "exec",
+        arguments: { command: `echo "ok"` },
+      },
+    ]);
+  });
+
   it("supports async stream functions that return a promise", async () => {
     const finalToolCall = { type: "toolCall", name: " browser " };
     const finalMessage = { role: "assistant", content: [finalToolCall] };

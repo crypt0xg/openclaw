@@ -3,6 +3,7 @@ import { streamSimple } from "@mariozechner/pi-ai";
 import { visitObjectContentBlocks } from "../../../shared/message-content-blocks.js";
 import { normalizeLowercaseStringOrEmpty } from "../../../shared/string-coerce.js";
 import { validateAnthropicTurns, validateGeminiTurns } from "../../pi-embedded-helpers.js";
+import { promoteMinimaxXmlToolCallsToBlocks } from "../../pi-embedded-utils.js";
 import { sanitizeToolUseResultPairing } from "../../session-transcript-repair.js";
 import {
   extractToolCallsFromAssistant,
@@ -20,6 +21,18 @@ type UnknownToolLoopGuardState = {
   count: number;
   countedMessages: WeakSet<object>;
 };
+
+function promoteMinimaxXmlToolCallsInMessage(message: unknown): void {
+  if (!message || typeof message !== "object") {
+    return;
+  }
+  if ((message as { role?: unknown }).role !== "assistant") {
+    return;
+  }
+  promoteMinimaxXmlToolCallsToBlocks(
+    message as Parameters<typeof promoteMinimaxXmlToolCallsToBlocks>[0],
+  );
+}
 
 function resolveCaseInsensitiveAllowedToolName(
   rawName: string,
@@ -782,6 +795,7 @@ function wrapStreamTrimToolCallNames(
   const originalResult = stream.result.bind(stream);
   stream.result = async () => {
     const message = await originalResult();
+    promoteMinimaxXmlToolCallsInMessage(message);
     trimWhitespaceFromToolCallNamesInMessage(message, allowedToolNames);
     guardUnknownToolLoopInMessage(message, unknownToolGuardState, {
       allowedToolNames,
@@ -793,6 +807,8 @@ function wrapStreamTrimToolCallNames(
   };
 
   wrapStreamObjectEvents(stream, (event) => {
+    promoteMinimaxXmlToolCallsInMessage(event.partial);
+    promoteMinimaxXmlToolCallsInMessage(event.message);
     trimWhitespaceFromToolCallNamesInMessage(event.partial, allowedToolNames);
     trimWhitespaceFromToolCallNamesInMessage(event.message, allowedToolNames);
     if (event.message && typeof event.message === "object") {

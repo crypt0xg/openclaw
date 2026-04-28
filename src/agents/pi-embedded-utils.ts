@@ -1,12 +1,16 @@
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type { AssistantMessage } from "@mariozechner/pi-ai";
+import { XMLParser } from "fast-xml-parser";
 import { extractTextFromChatContent } from "../shared/chat-content.js";
 import {
   normalizeAssistantPhase,
   parseAssistantTextSignature,
   type AssistantPhase,
 } from "../shared/chat-message-content.js";
-import { sanitizeAssistantVisibleText } from "../shared/text/assistant-visible-text.js";
+import {
+  sanitizeAssistantVisibleText,
+  stripMinimaxToolCallXml,
+} from "../shared/text/assistant-visible-text.js";
 import { stripReasoningTagsFromText } from "../shared/text/reasoning-tags.js";
 import { sanitizeUserFacingText } from "./pi-embedded-helpers/sanitize-user-facing-text.js";
 import { formatToolDetail, resolveToolDisplay } from "./tool-display.js";
@@ -19,6 +23,161 @@ export { stripModelSpecialTokens } from "../shared/text/model-special-tokens.js"
 
 export function isAssistantMessage(msg: AgentMessage | undefined): msg is AssistantMessage {
   return msg?.role === "assistant";
+}
+
+type MinimaxXmlNode = Record<string, unknown>;
+type MinimaxXmlToolCall = {
+  type: "toolCall";
+  id: string;
+  name: string;
+  arguments: Record<string, string>;
+};
+
+const MINIMAX_INVOKE_RE = /<invoke\b[^>]*>[\s\S]*?<\/invoke>/gi;
+const MINIMAX_HTML_ENTITY_RE = /&(?:amp|lt|gt|quot|apos|#39|#x[0-9a-f]+|#\d+);/i;
+
+const minimaxXmlParser = new XMLParser({
+  attributeNamePrefix: "",
+  ignoreAttributes: false,
+  parseAttributeValue: false,
+  parseTagValue: false,
+  preserveOrder: true,
+  processEntities: true,
+  textNodeName: "#text",
+  trimValues: false,
+});
+
+function asMinimaxXmlNodes(value: unknown): MinimaxXmlNode[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is MinimaxXmlNode => Boolean(item) && typeof item === "object")
+    : [];
+}
+
+function collectMinimaxXmlText(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (!Array.isArray(value)) {
+    return "";
+  }
+  let text = "";
+  for (const node of asMinimaxXmlNodes(value)) {
+    for (const [key, child] of Object.entries(node)) {
+      if (key === ":@") {
+        continue;
+      }
+      text += key === "#text" ? String(child ?? "") : collectMinimaxXmlText(child);
+    }
+  }
+  return text;
+}
+
+function decodeMinimaxHtmlEntities(value: string): string {
+  if (!MINIMAX_HTML_ENTITY_RE.test(value)) {
+    return value;
+  }
+  return value
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&apos;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCodePoint(Number.parseInt(hex, 16)))
+    .replace(/&#(\d+);/gi, (_, dec) => String.fromCodePoint(Number.parseInt(dec, 10)));
+}
+
+function parseMinimaxXmlInvoke(invokeXml: string, index: number): MinimaxXmlToolCall | null {
+  let parsed: unknown;
+  try {
+    parsed = minimaxXmlParser.parse(`<root>${invokeXml}</root>`);
+  } catch {
+    return null;
+  }
+
+  const rootNode = asMinimaxXmlNodes(parsed)[0]?.root;
+  const invokeNode = asMinimaxXmlNodes(rootNode).find((node) => "invoke" in node);
+  if (!invokeNode) {
+    return null;
+  }
+  const attrs = invokeNode[":@"] as Record<string, unknown> | undefined;
+  const name = typeof attrs?.name === "string" ? attrs.name.trim() : "";
+  if (!name) {
+    return null;
+  }
+
+  const args: Record<string, string> = {};
+  for (const child of asMinimaxXmlNodes(invokeNode.invoke)) {
+    if (!("parameter" in child)) {
+      continue;
+    }
+    const parameterAttrs = child[":@"] as Record<string, unknown> | undefined;
+    const parameterName =
+      typeof parameterAttrs?.name === "string" ? parameterAttrs.name.trim() : "";
+    if (!parameterName) {
+      continue;
+    }
+    args[parameterName] = decodeMinimaxHtmlEntities(collectMinimaxXmlText(child.parameter));
+  }
+
+  return {
+    type: "toolCall",
+    id: `call_minimax_xml_${index + 1}`,
+    name,
+    arguments: args,
+  };
+}
+
+export function parseMinimaxXmlToolCalls(text: string): MinimaxXmlToolCall[] {
+  if (!text || !/minimax:tool_call/i.test(text)) {
+    return [];
+  }
+  const calls: MinimaxXmlToolCall[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = MINIMAX_INVOKE_RE.exec(text))) {
+    const call = parseMinimaxXmlInvoke(match[0], calls.length);
+    if (call) {
+      calls.push(call);
+    }
+  }
+  return calls;
+}
+
+export function promoteMinimaxXmlToolCallsToBlocks(message: AssistantMessage): void {
+  if (!Array.isArray(message.content)) {
+    return;
+  }
+
+  const next: AssistantMessage["content"] = [];
+  let changed = false;
+  let nextToolCallIndex = 1;
+  for (const block of message.content) {
+    if (!block || typeof block !== "object" || block.type !== "text") {
+      next.push(block);
+      continue;
+    }
+    const toolCalls = parseMinimaxXmlToolCalls(block.text);
+    if (toolCalls.length === 0) {
+      next.push(block);
+      continue;
+    }
+
+    changed = true;
+    const text = stripMinimaxToolCallXml(block.text);
+    if (text.trim()) {
+      next.push({ ...block, text });
+    }
+    for (const toolCall of toolCalls) {
+      next.push({ ...toolCall, id: `call_minimax_xml_${nextToolCallIndex++}` });
+    }
+  }
+
+  if (changed) {
+    message.content = next;
+    if (message.stopReason === "stop") {
+      message.stopReason = "toolUse";
+    }
+  }
 }
 
 /**

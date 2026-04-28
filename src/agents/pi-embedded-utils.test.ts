@@ -5,6 +5,8 @@ import {
   extractAssistantThinking,
   extractAssistantVisibleText,
   formatReasoningMessage,
+  parseMinimaxXmlToolCalls,
+  promoteMinimaxXmlToolCallsToBlocks,
   promoteThinkingTagsToBlocks,
   stripDowngradedToolCallText,
 } from "./pi-embedded-utils.js";
@@ -605,6 +607,103 @@ File contents here`,
       });
       expect(extractAssistantText(msg), testCase.name).toBe(testCase.expected);
     }
+  });
+});
+
+describe("parseMinimaxXmlToolCalls", () => {
+  it("parses MiniMax XML invokes with escaped entities and unordered attributes", () => {
+    expect(
+      parseMinimaxXmlToolCalls(
+        `<minimax:tool_call>
+<invoke data-extra="1" name="Bash">
+<parameter name="command">echo &quot;hello&quot; &amp;&amp; printf &#39;ok&#39;</parameter>
+</invoke>
+</minimax:tool_call>`,
+      ),
+    ).toEqual([
+      {
+        type: "toolCall",
+        id: "call_minimax_xml_1",
+        name: "Bash",
+        arguments: { command: `echo "hello" && printf 'ok'` },
+      },
+    ]);
+  });
+
+  it("parses multiple invokes and wrapper variants", () => {
+    expect(
+      parseMinimaxXmlToolCalls(
+        `<invoke name="Read"><parameter name="path">README.md</parameter></invoke></minimax:tool_call>
+<minimax:tool_call><invoke name='Bash'><parameter name="command">pwd</parameter></invoke></minimax:tool_call>`,
+      ),
+    ).toEqual([
+      {
+        type: "toolCall",
+        id: "call_minimax_xml_1",
+        name: "Read",
+        arguments: { path: "README.md" },
+      },
+      {
+        type: "toolCall",
+        id: "call_minimax_xml_2",
+        name: "Bash",
+        arguments: { command: "pwd" },
+      },
+    ]);
+  });
+
+  it("skips malformed sibling invokes while preserving valid invokes", () => {
+    expect(
+      parseMinimaxXmlToolCalls(
+        `<invoke><parameter name="path">missing-name</parameter></invoke></minimax:tool_call>
+<invoke name="Bash"><parameter>missing-parameter-name</parameter></invoke></minimax:tool_call>
+<invoke name="Read"><parameter name="path">package.json</parameter></invoke></minimax:tool_call>`,
+      ),
+    ).toEqual([
+      {
+        type: "toolCall",
+        id: "call_minimax_xml_1",
+        name: "Bash",
+        arguments: {},
+      },
+      {
+        type: "toolCall",
+        id: "call_minimax_xml_2",
+        name: "Read",
+        arguments: { path: "package.json" },
+      },
+    ]);
+  });
+});
+
+describe("promoteMinimaxXmlToolCallsToBlocks", () => {
+  it("promotes MiniMax XML invokes into executable tool-use blocks before text stripping", () => {
+    const msg = makeAssistantMessage({
+      role: "assistant",
+      content: [
+        {
+          type: "text",
+          text: `I'll check.<invoke name="Bash">
+<parameter name="command">echo &quot;ok&quot;</parameter>
+</invoke>
+</minimax:tool_call>Done.`,
+        },
+      ],
+      timestamp: Date.now(),
+    });
+
+    promoteMinimaxXmlToolCallsToBlocks(msg);
+
+    expect(msg.stopReason).toBe("toolUse");
+    expect(msg.content).toEqual([
+      { type: "text", text: "I'll check.\nDone." },
+      {
+        type: "toolCall",
+        id: "call_minimax_xml_1",
+        name: "Bash",
+        arguments: { command: `echo "ok"` },
+      },
+    ]);
   });
 });
 
