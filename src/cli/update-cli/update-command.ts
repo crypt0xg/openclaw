@@ -1642,6 +1642,11 @@ export async function updateCommand(opts: UpdateCommandOptions): Promise<void> {
     process.env,
   );
   if (shouldRestart) {
+    const prepareUpdatedInstallRestart = async (env: NodeJS.ProcessEnv) => {
+      gatewayServiceEnv = env;
+      restartScriptPath = await prepareRestartScript(env, gatewayPort);
+      refreshGatewayServiceEnv = true;
+    };
     try {
       const serviceState = await readGatewayServiceState(resolveGatewayService(), {
         env: process.env,
@@ -1653,12 +1658,18 @@ export async function updateCommand(opts: UpdateCommandOptions): Promise<void> {
           serviceLoaded: serviceState.loaded,
         })
       ) {
-        gatewayServiceEnv = serviceState.env;
-        restartScriptPath = await prepareRestartScript(serviceState.env, gatewayPort);
-        refreshGatewayServiceEnv = true;
+        await prepareUpdatedInstallRestart(serviceState.env);
+      } else if (isPackageManagerUpdateMode(resultWithPostUpdate.mode)) {
+        const previousServiceEnv = prePackageServiceStop?.serviceEnv;
+        if (previousServiceEnv) {
+          await prepareUpdatedInstallRestart(previousServiceEnv);
+        }
       }
     } catch {
-      // Ignore errors during pre-check; fallback to standard restart
+      const previousServiceEnv = prePackageServiceStop?.serviceEnv;
+      if (isPackageManagerUpdateMode(resultWithPostUpdate.mode) && previousServiceEnv) {
+        await prepareUpdatedInstallRestart(previousServiceEnv);
+      }
     }
   }
 

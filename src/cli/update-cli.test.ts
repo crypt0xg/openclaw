@@ -1474,6 +1474,100 @@ describe("update-cli", () => {
     expect(serviceStopCallOrder).toBeLessThan(npmInstallCallOrder);
   });
 
+  it("recovers package update restart from the updated install when LaunchAgent state disappears", async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-update-missing-agent-"));
+    const nodeModules = path.join(tempDir, "node_modules");
+    const pkgRoot = path.join(nodeModules, "openclaw");
+    const entryPath = path.join(pkgRoot, "dist", "index.js");
+    const previousServiceEnv = {
+      OPENCLAW_SERVICE_MARKER: "openclaw",
+      OPENCLAW_SERVICE_KIND: "gateway",
+      OPENCLAW_LAUNCHD_LABEL: "ai.openclaw.gateway",
+    };
+    mockPackageInstallStatus(pkgRoot);
+    readPackageVersion.mockResolvedValue("2026.4.21");
+    await fs.mkdir(path.dirname(entryPath), { recursive: true });
+    await fs.writeFile(
+      path.join(pkgRoot, "package.json"),
+      JSON.stringify({ name: "openclaw", version: "2026.4.21" }),
+      "utf-8",
+    );
+    await fs.writeFile(entryPath, "export {};\n", "utf-8");
+    await writePackageDistInventory(pkgRoot);
+    serviceReadCommand
+      .mockResolvedValueOnce({
+        programArguments: ["openclaw", "gateway", "run"],
+        environment: previousServiceEnv,
+      })
+      .mockResolvedValueOnce(null);
+    serviceLoaded.mockResolvedValueOnce(true).mockResolvedValue(false);
+    pathExists.mockImplementation(async (candidate: string) => {
+      try {
+        await fs.access(candidate);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    vi.mocked(runCommandWithTimeout).mockImplementation(async (argv) => {
+      if (Array.isArray(argv) && argv[0] === "npm" && argv[1] === "root" && argv[2] === "-g") {
+        return {
+          stdout: `${nodeModules}\n`,
+          stderr: "",
+          code: 0,
+          signal: null,
+          killed: false,
+          termination: "exit",
+        };
+      }
+      return {
+        stdout: "",
+        stderr: "",
+        code: 0,
+        signal: null,
+        killed: false,
+        termination: "exit",
+      };
+    });
+    probeGateway.mockResolvedValue({
+      ok: true,
+      close: null,
+      server: {
+        version: "2026.4.21",
+        connId: "updated-gateway",
+      },
+      auth: { role: "operator", scopes: ["operator.read"], capability: "read_only" },
+      health: null,
+      status: null,
+      presence: null,
+      configSnapshot: null,
+      connectLatencyMs: 1,
+      error: null,
+      url: "ws://127.0.0.1:18789",
+    });
+
+    await updateCommand({ yes: true });
+
+    expect(prepareRestartScript).toHaveBeenCalledWith(
+      expect.objectContaining(previousServiceEnv),
+      18789,
+    );
+    expect(runCommandWithTimeout).toHaveBeenCalledWith(
+      [expect.stringMatching(/node/), entryPath, "gateway", "install", "--force"],
+      expect.objectContaining({
+        cwd: pkgRoot,
+        timeoutMs: 60_000,
+        env: expect.objectContaining(previousServiceEnv),
+      }),
+    );
+    expect(runRestartScript).toHaveBeenCalled();
+    expect(runCommandWithTimeout).not.toHaveBeenCalledWith(
+      [expect.stringMatching(/node/), entryPath, "gateway", "restart"],
+      expect.any(Object),
+    );
+    expect(defaultRuntime.exit).not.toHaveBeenCalledWith(1);
+  });
+
   it("refreshes package installs even when the current version already matches the target", async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-update-current-"));
     const nodeModules = path.join(tempDir, "node_modules");
