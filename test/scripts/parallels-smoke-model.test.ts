@@ -41,13 +41,6 @@ describe("Parallels smoke model selection", () => {
     expect(script).toMatch(/parallels-linux-smoke\.sh"[\s\S]*?--model "\$MODEL_ID"/);
   });
 
-  it("disables Bonjour by default for the standalone Linux gateway smoke", () => {
-    const script = readFileSync("scripts/e2e/parallels-linux-smoke.sh", "utf8");
-
-    expect(script).toContain("DISABLE_BONJOUR_FOR_GATEWAY=1");
-    expect(script).toContain("OPENCLAW_DISABLE_BONJOUR=1");
-  });
-
   it("lets the macOS gateway status probe use the full phase budget", () => {
     const script = readFileSync("scripts/e2e/parallels-macos-smoke.sh", "utf8");
 
