@@ -1083,6 +1083,15 @@ gateway_log_ready() {
 gateway_smoke_ready() {
   gateway_listener_ready && gateway_log_ready
 }
+stop_openclaw_gateway_processes() {
+  OPENCLAW_DISABLE_BUNDLED_PLUGINS=1 /opt/homebrew/bin/openclaw gateway stop >/dev/null 2>&1 || true
+  /usr/bin/pkill -9 -f openclaw-gateway || true
+  /usr/bin/pkill -9 -f 'openclaw gateway run' || true
+  /usr/bin/pkill -9 -f 'openclaw.mjs gateway' || true
+  for pid in \$(/usr/sbin/lsof -tiTCP:18789 -sTCP:LISTEN 2>/dev/null || true); do
+    /bin/kill -9 "\$pid" 2>/dev/null || true
+  done
+}
 if [ -n "\$busy" ]; then
   printf 'update still has active npm/pnpm/openclaw processes\n%s\n' "\$busy" >&2
   exit 1
@@ -1118,6 +1127,18 @@ if [ "\$gateway_ready" != "1" ]; then
   done
 fi
 if [ "\$gateway_ready" != "1" ]; then
+  stop_openclaw_gateway_processes
+  /opt/homebrew/bin/openclaw gateway run --bind loopback --port 18789 --force >/tmp/openclaw-parallels-npm-update-macos-recover-gateway.log 2>&1 </dev/null &
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    if gateway_smoke_ready; then
+      gateway_ready=1
+      break
+    fi
+    sleep 2
+  done
+fi
+if [ "\$gateway_ready" != "1" ]; then
+  tail -n 120 /tmp/openclaw-parallels-npm-update-macos-recover-gateway.log 2>/dev/null || true
   echo "gateway did not become ready after transport recovery" >&2
   exit 1
 fi
