@@ -320,6 +320,7 @@ function getLastDispatchCtx():
       ParentSessionKey?: string;
       SessionKey?: string;
       Transcript?: string;
+      ThreadStarterBody?: string;
     }
   | undefined {
   const callArgs = dispatchInboundMessage.mock.calls.at(-1) as unknown[] | undefined;
@@ -334,6 +335,7 @@ function getLastDispatchCtx():
           ParentSessionKey?: string;
           SessionKey?: string;
           Transcript?: string;
+          ThreadStarterBody?: string;
         };
       }
     | undefined;
@@ -784,6 +786,81 @@ describe("processDiscordMessage session routing", () => {
       to: "channel:c1",
       accountId: "default",
     });
+  });
+
+  it("includes Discord thread starter context on the first effective thread session turn", async () => {
+    const restGet = vi.fn().mockResolvedValue({
+      content: "starter root context",
+      author: { id: "U2", username: "bob", discriminator: "0" },
+      timestamp: "2026-02-24T12:00:00.000Z",
+    });
+    const ctx = await createBaseContext({
+      baseSessionKey: "agent:main:discord:channel:thread-first",
+      route: {
+        ...BASE_CHANNEL_ROUTE,
+        sessionKey: "agent:main:discord:channel:thread-first",
+      },
+      client: { rest: { get: restGet } },
+      messageChannelId: "thread-first",
+      message: {
+        id: "m1",
+        channelId: "thread-first",
+        timestamp: new Date().toISOString(),
+        attachments: [],
+      },
+      threadChannel: { id: "thread-first", name: "first-thread" },
+      threadParentId: "parent-1",
+    });
+
+    await processDiscordMessage(ctx as any);
+
+    expect(getLastDispatchCtx()).toMatchObject({
+      SessionKey: "agent:main:discord:channel:thread-first",
+      ThreadStarterBody: "starter root context",
+    });
+    expect(restGet).toHaveBeenCalledTimes(1);
+  });
+
+  it("omits Discord thread starter context after the effective thread session exists", async () => {
+    const effectiveSessionKey = "agent:main:discord:channel:thread-existing";
+    const restGet = vi.fn().mockResolvedValue({
+      content: "starter root context",
+      author: { id: "U2", username: "bob", discriminator: "0" },
+      timestamp: "2026-02-24T12:00:00.000Z",
+    });
+    readSessionUpdatedAt.mockImplementation((params?: unknown) => {
+      const sessionKey = (params as { sessionKey?: string } | undefined)?.sessionKey;
+      return sessionKey === effectiveSessionKey ? 1_700_000_000_000 : undefined;
+    });
+    const ctx = await createBaseContext({
+      baseSessionKey: "agent:main:discord:channel:parent-1",
+      route: {
+        ...BASE_CHANNEL_ROUTE,
+        sessionKey: "agent:main:discord:channel:parent-1",
+      },
+      boundSessionKey: effectiveSessionKey,
+      client: { rest: { get: restGet } },
+      messageChannelId: "thread-existing",
+      message: {
+        id: "m1",
+        channelId: "thread-existing",
+        timestamp: new Date().toISOString(),
+        attachments: [],
+      },
+      threadChannel: { id: "thread-existing", name: "existing-thread" },
+      threadParentId: "parent-1",
+    });
+
+    await processDiscordMessage(ctx as any);
+
+    expect(getLastDispatchCtx()).toMatchObject({
+      SessionKey: effectiveSessionKey,
+    });
+    expect(getLastDispatchCtx()?.ThreadStarterBody).toBeUndefined();
+    expect(readSessionUpdatedAt).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionKey: effectiveSessionKey }),
+    );
+    expect(restGet).toHaveBeenCalledTimes(1);
   });
 
   it("marks always-on guild replies as message-tool-only and disables source streaming", async () => {

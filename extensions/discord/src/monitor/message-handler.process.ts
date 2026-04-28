@@ -498,6 +498,15 @@ export async function processDiscordMessage(
       : undefined;
 
   const originatingTo = autoThreadContext?.OriginatingTo ?? dmConversationTarget ?? replyTarget;
+  const ctxSessionKey = boundSessionKey ?? autoThreadContext?.SessionKey ?? threadKeys.sessionKey;
+  const threadSessionPreviousTimestamp = threadChannel
+    ? ctxSessionKey === route.sessionKey
+      ? previousTimestamp
+      : readSessionUpdatedAt({
+          storePath,
+          sessionKey: ctxSessionKey,
+        })
+    : undefined;
 
   const ctxPayload = finalizeInboundContext({
     Body: combinedBody,
@@ -508,7 +517,7 @@ export async function processDiscordMessage(
     ...(preflightAudioTranscript !== undefined ? { Transcript: preflightAudioTranscript } : {}),
     From: effectiveFrom,
     To: effectiveTo,
-    SessionKey: boundSessionKey ?? autoThreadContext?.SessionKey ?? threadKeys.sessionKey,
+    SessionKey: ctxSessionKey,
     AccountId: route.accountId,
     ChatType: isDirectMessage ? "direct" : "channel",
     ConversationLabel: fromLabel,
@@ -534,7 +543,7 @@ export async function processDiscordMessage(
     ModelParentSessionKey:
       autoThreadContext?.ModelParentSessionKey ?? modelParentSessionKey ?? undefined,
     MessageThreadId: threadChannel?.id ?? autoThreadContext?.createdThreadId ?? undefined,
-    ThreadStarterBody: threadStarterBody,
+    ThreadStarterBody: !threadSessionPreviousTimestamp ? threadStarterBody : undefined,
     ThreadLabel: threadLabel,
     Timestamp: resolveTimestampMs(message.timestamp),
     ...mediaPayload,
