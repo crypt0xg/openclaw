@@ -75,7 +75,10 @@ describe("buildDeveloperInstructions", () => {
     const prompt = buildDeveloperInstructions(createAttemptParams());
 
     expect(prompt).toContain(
-      "When replying in the current chat/session, answer normally and let OpenClaw deliver that reply automatically.",
+      "When replying in the current chat/session, answer normally and let OpenClaw handle delivery when normal final replies are enabled for that channel.",
+    );
+    expect(prompt).toContain(
+      "If the turn says source channel delivery is private or message-tool-only, use the messaging tool for visible output.",
     );
   });
 });

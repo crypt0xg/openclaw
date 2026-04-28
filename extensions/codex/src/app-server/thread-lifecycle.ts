@@ -225,7 +225,8 @@ export function buildDeveloperInstructions(params: EmbeddedRunAttemptParams): st
     "You are running inside OpenClaw. Use OpenClaw dynamic tools for messaging, cron, sessions, and host actions when available.",
     [
       "Preserve the user's existing channel/session context.",
-      "When replying in the current chat/session, answer normally and let OpenClaw deliver that reply automatically.",
+      "When replying in the current chat/session, answer normally and let OpenClaw handle delivery when normal final replies are enabled for that channel.",
+      "If the turn says source channel delivery is private or message-tool-only, use the messaging tool for visible output.",
     ].join(" "),
     promptOverlay,
     params.extraSystemPrompt,
