@@ -173,6 +173,9 @@ describe("googlechat setup", () => {
         if (message === "App URL") {
           return "https://example.com/googlechat";
         }
+        if (message === "Add-on app principal (JWT sub, optional)") {
+          return "123456789012345678901";
+        }
         throw new Error(`Unexpected prompt: ${message}`);
       }) as WizardPrompter["text"],
     });
@@ -191,6 +194,7 @@ describe("googlechat setup", () => {
     );
     expect(result.cfg.channels?.googlechat?.audienceType).toBe("app-url");
     expect(result.cfg.channels?.googlechat?.audience).toBe("https://example.com/googlechat");
+    expect(result.cfg.channels?.googlechat?.appPrincipal).toBe("123456789012345678901");
   });
 
   it("reads the named-account DM policy instead of the channel root", () => {

@@ -12,6 +12,7 @@ Docs: https://docs.openclaw.ai
 
 ### Fixes
 
+- Google Chat: normalize Google Workspace Add-ons wrapper events for added/removed space, card clicks, widget updates, and app commands while continuing to bind Add-ons auth to the numeric JWT `sub` app principal. Fixes #65326. Thanks @andamasov and @SmileyChris.
 - Control UI/WebChat: keep large attachment payloads out of Lit state and optimistic chat messages, using object URL previews plus send-time payload serialization so PDF/image uploads no longer trigger `RangeError: Maximum call stack size exceeded`. Fixes #73360; refs #54378 and #63432. Thanks @hejunhui-73, @Ansub, and @christianhernandez3-afk.
 - Agents/models: keep per-agent primary models strict when `fallbacks` is omitted, so probe-only custom providers are not tried as hidden fallback candidates unless the agent explicitly opts in. Fixes #73332. Thanks @haumanto.
 - Cron/Telegram: preserve explicit `:topic:` delivery targets over stale session-derived thread IDs when isolated cron announces to Telegram forum topics. Carries forward #59069; refs #49704 and #43808. Thanks @roytong9.

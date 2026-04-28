@@ -45,6 +45,7 @@ Status: ready for DMs + spaces via Google Chat API webhooks (HTTP only).
    - Env: `GOOGLE_CHAT_SERVICE_ACCOUNT_FILE=/path/to/service-account.json`
    - Or config: `channels.googlechat.serviceAccountFile: "/path/to/service-account.json"`.
 8. Set the webhook audience type + value (matches your Chat app config).
+   - For Google Workspace Add-ons, use `audienceType: "app-url"` with the exact HTTPS webhook URL as `audience`, and set `appPrincipal` to the numeric `sub` claim from the Add-on `authorizationEventObject.systemIdToken` JWT. Do not use the Add-on service account email for `appPrincipal`.
 9. Start the gateway. Google Chat will POST to your webhook path.
 
 ## Add to Google Chat
@@ -138,10 +139,11 @@ Configure your tunnel's ingress rules to only route the webhook path:
 
 1. Google Chat sends webhook POSTs to the gateway. Each request includes an `Authorization: Bearer <token>` header.
    - OpenClaw verifies bearer auth before reading/parsing full webhook bodies when the header is present.
-   - Google Workspace Add-on requests that carry `authorizationEventObject.systemIdToken` in the body are supported via a stricter pre-auth body budget.
+   - Google Workspace Add-on requests that carry `authorizationEventObject.systemIdToken` in the body are supported via a stricter pre-auth body budget, including wrapped message, added-to-space, removed-from-space, card-clicked, widget-updated, and app-command payloads.
 2. OpenClaw verifies the token against the configured `audienceType` + `audience`:
    - `audienceType: "app-url"` → audience is your HTTPS webhook URL.
    - `audienceType: "project-number"` → audience is the Cloud project number.
+   - Workspace Add-ons must also bind `appPrincipal` to the numeric JWT `sub` claim for the Add-on principal.
 3. Messages are routed by space:
    - DMs use session key `agent:<agentId>:googlechat:direct:<spaceId>`.
    - Spaces use session key `agent:<agentId>:googlechat:group:<spaceId>`.
@@ -169,6 +171,7 @@ Use these identifiers for delivery and allowlists:
       // or serviceAccountRef: { source: "file", provider: "filemain", id: "/channels/googlechat/serviceAccount" }
       audienceType: "app-url",
       audience: "https://gateway.example.com/googlechat",
+      appPrincipal: "123456789012345678901", // Workspace Add-ons only: numeric JWT sub claim
       webhookPath: "/googlechat",
       botUser: "users/1234567890", // optional; helps mention detection
       dm: {

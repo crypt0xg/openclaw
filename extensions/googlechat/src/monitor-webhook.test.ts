@@ -158,6 +158,187 @@ describe("googlechat monitor webhook", () => {
     expect(res.headers["Content-Type"]).toBe("application/json");
   });
 
+  it.each([
+    [
+      "added to space",
+      {
+        chat: {
+          addedToSpacePayload: {
+            space: { name: "spaces/AAA", type: "ROOM" },
+            configCompleteRedirectUri: "https://chat.google.com/config/complete",
+          },
+        },
+      },
+      {
+        type: "ADDED_TO_SPACE",
+        space: { name: "spaces/AAA", type: "ROOM" },
+        configCompleteRedirectUrl: "https://chat.google.com/config/complete",
+      },
+    ],
+    [
+      "removed from space",
+      {
+        chat: {
+          removedFromSpacePayload: {
+            space: { name: "spaces/BBB", type: "ROOM" },
+          },
+        },
+      },
+      {
+        type: "REMOVED_FROM_SPACE",
+        space: { name: "spaces/BBB", type: "ROOM" },
+      },
+    ],
+    [
+      "button clicked",
+      {
+        chat: {
+          buttonClickedPayload: {
+            space: { name: "spaces/CCC", type: "ROOM" },
+            message: { name: "spaces/CCC/messages/1", text: "card" },
+            action: { actionMethodName: "approve" },
+            isDialogEvent: true,
+            dialogEventType: "SUBMIT_DIALOG",
+          },
+        },
+      },
+      {
+        type: "CARD_CLICKED",
+        space: { name: "spaces/CCC", type: "ROOM" },
+        message: { name: "spaces/CCC/messages/1", text: "card" },
+        action: { actionMethodName: "approve" },
+        isDialogEvent: true,
+        dialogEventType: "SUBMIT_DIALOG",
+      },
+    ],
+    [
+      "widget updated",
+      {
+        chat: {
+          widgetUpdatedPayload: {
+            space: { name: "spaces/DDD", type: "DM" },
+          },
+        },
+      },
+      {
+        type: "WIDGET_UPDATED",
+        space: { name: "spaces/DDD", type: "DM" },
+      },
+    ],
+    [
+      "app command",
+      {
+        chat: {
+          appCommandPayload: {
+            space: { name: "spaces/EEE", type: "ROOM" },
+            message: { name: "spaces/EEE/messages/1", text: "/openclaw status" },
+            threadKey: "cmd-thread",
+            appCommandMetadata: { appCommandId: "status" },
+            configCompleteRedirectUri: "https://chat.google.com/config/command",
+          },
+        },
+      },
+      {
+        type: "APP_COMMAND",
+        space: { name: "spaces/EEE", type: "ROOM" },
+        message: { name: "spaces/EEE/messages/1", text: "/openclaw status" },
+        threadKey: "cmd-thread",
+        appCommandMetadata: { appCommandId: "status" },
+        configCompleteRedirectUrl: "https://chat.google.com/config/command",
+      },
+    ],
+  ])("normalizes add-on %s payloads", async (_name, input, expectedEvent) => {
+    installSimplePipeline([
+      {
+        account: {
+          accountId: "default",
+          config: { appPrincipal: "chat-app" },
+        },
+        runtime: { error: vi.fn() },
+        statusSink: vi.fn(),
+        audienceType: "app-url",
+        audience: "https://example.com/googlechat",
+      },
+    ]);
+    readJsonWebhookBodyOrReject.mockResolvedValue({
+      ok: true,
+      value: {
+        commonEventObject: { hostApp: "CHAT" },
+        authorizationEventObject: { systemIdToken: "addon-token" },
+        ...input,
+        chat: {
+          eventTime: "2026-03-22T00:00:00.000Z",
+          user: { name: "users/123" },
+          ...input.chat,
+        },
+      },
+    });
+    resolveWebhookTargetWithAuthOrReject.mockImplementation(async ({ isMatch, targets }) => {
+      for (const target of targets) {
+        if (await isMatch(target)) {
+          return target;
+        }
+      }
+      return null;
+    });
+    verifyGoogleChatRequest.mockResolvedValue({ ok: true });
+    const { processEvent, res } = await runWebhookHandler();
+
+    expect(processEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventTime: "2026-03-22T00:00:00.000Z",
+        user: { name: "users/123" },
+        ...expectedEvent,
+      }),
+      expect.anything(),
+    );
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("acknowledges unsupported add-on chat payloads after auth without dispatching", async () => {
+    installSimplePipeline([
+      {
+        account: {
+          accountId: "default",
+          config: { appPrincipal: "chat-app" },
+        },
+        runtime: { error: vi.fn() },
+        statusSink: vi.fn(),
+        audienceType: "app-url",
+        audience: "https://example.com/googlechat",
+      },
+    ]);
+    readJsonWebhookBodyOrReject.mockResolvedValue({
+      ok: true,
+      value: {
+        commonEventObject: { hostApp: "CHAT" },
+        authorizationEventObject: { systemIdToken: "addon-token" },
+        chat: {
+          eventTime: "2026-03-22T00:00:00.000Z",
+          user: { name: "users/123" },
+          unsupportedFuturePayload: { space: { name: "spaces/AAA" } },
+        },
+      },
+    });
+    resolveWebhookTargetWithAuthOrReject.mockImplementation(async ({ isMatch, targets }) => {
+      for (const target of targets) {
+        if (await isMatch(target)) {
+          return target;
+        }
+      }
+      return null;
+    });
+    verifyGoogleChatRequest.mockResolvedValue({ ok: true });
+    const { processEvent, res } = await runWebhookHandler();
+
+    expect(verifyGoogleChatRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ bearer: "addon-token" }),
+    );
+    expect(processEvent).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["Content-Type"]).toBe("application/json");
+  });
+
   it("logs WARN with reason when verification fails (missing token)", async () => {
     const logFn = vi.fn();
     installSimplePipeline([

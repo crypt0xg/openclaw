@@ -33,8 +33,144 @@ const ADD_ON_PREAUTH_TIMEOUT_MS = 3_000;
 
 type ParsedGoogleChatInboundPayload =
   | { ok: true; event: GoogleChatEvent; addOnBearerToken: string }
+  | { ok: true; event: null; addOnBearerToken: string }
   | { ok: false };
 type ParsedGoogleChatInboundSuccess = Extract<ParsedGoogleChatInboundPayload, { ok: true }>;
+
+type GoogleChatAddOnPayload = {
+  space?: GoogleChatSpace;
+  message?: GoogleChatMessage;
+  configCompleteRedirectUri?: string;
+  threadKey?: string;
+  isDialogEvent?: boolean;
+  dialogEventType?: string;
+  appCommandMetadata?: Record<string, unknown>;
+  action?: Record<string, unknown>;
+};
+
+type GoogleChatAddOnChatObject = {
+  eventTime?: string;
+  user?: GoogleChatUser;
+  messagePayload?: GoogleChatAddOnPayload;
+  addedToSpacePayload?: GoogleChatAddOnPayload;
+  removedFromSpacePayload?: GoogleChatAddOnPayload;
+  buttonClickedPayload?: GoogleChatAddOnPayload;
+  widgetUpdatedPayload?: GoogleChatAddOnPayload;
+  appCommandPayload?: GoogleChatAddOnPayload;
+};
+
+type GoogleChatAddOnEventObject = {
+  commonEventObject?: { hostApp?: string };
+  chat?: GoogleChatAddOnChatObject;
+  authorizationEventObject?: { systemIdToken?: string };
+};
+
+function getAddOnBearerToken(rawObj: GoogleChatAddOnEventObject): string {
+  return typeof rawObj.authorizationEventObject?.systemIdToken === "string"
+    ? rawObj.authorizationEventObject.systemIdToken.trim()
+    : "";
+}
+
+function normalizeGoogleChatAddOnPayload(
+  rawObj: GoogleChatAddOnEventObject,
+): { event: GoogleChatEvent | null; addOnBearerToken: string } | null {
+  if (rawObj.commonEventObject?.hostApp !== "CHAT" || !rawObj.chat) {
+    return null;
+  }
+
+  const chat = rawObj.chat;
+  const addOnBearerToken = getAddOnBearerToken(rawObj);
+  const baseEvent = {
+    user: chat.user,
+    eventTime: chat.eventTime,
+  };
+
+  if (chat.messagePayload) {
+    const payload = chat.messagePayload;
+    return {
+      addOnBearerToken,
+      event: {
+        ...baseEvent,
+        type: "MESSAGE",
+        space: payload.space,
+        message: payload.message,
+        configCompleteRedirectUrl: payload.configCompleteRedirectUri,
+      } as GoogleChatEvent,
+    };
+  }
+
+  if (chat.addedToSpacePayload) {
+    const payload = chat.addedToSpacePayload;
+    return {
+      addOnBearerToken,
+      event: {
+        ...baseEvent,
+        type: "ADDED_TO_SPACE",
+        space: payload.space,
+        message: payload.message,
+        configCompleteRedirectUrl: payload.configCompleteRedirectUri,
+      } as GoogleChatEvent,
+    };
+  }
+
+  if (chat.removedFromSpacePayload) {
+    const payload = chat.removedFromSpacePayload;
+    return {
+      addOnBearerToken,
+      event: {
+        ...baseEvent,
+        type: "REMOVED_FROM_SPACE",
+        space: payload.space,
+      },
+    };
+  }
+
+  if (chat.buttonClickedPayload) {
+    const payload = chat.buttonClickedPayload;
+    return {
+      addOnBearerToken,
+      event: {
+        ...baseEvent,
+        type: "CARD_CLICKED",
+        space: payload.space,
+        message: payload.message,
+        action: payload.action,
+        isDialogEvent: payload.isDialogEvent,
+        dialogEventType: payload.dialogEventType,
+      } as GoogleChatEvent,
+    };
+  }
+
+  if (chat.widgetUpdatedPayload) {
+    const payload = chat.widgetUpdatedPayload;
+    return {
+      addOnBearerToken,
+      event: {
+        ...baseEvent,
+        type: "WIDGET_UPDATED",
+        space: payload.space,
+      },
+    };
+  }
+
+  if (chat.appCommandPayload) {
+    const payload = chat.appCommandPayload;
+    return {
+      addOnBearerToken,
+      event: {
+        ...baseEvent,
+        type: "APP_COMMAND",
+        space: payload.space,
+        message: payload.message,
+        threadKey: payload.threadKey,
+        appCommandMetadata: payload.appCommandMetadata,
+        configCompleteRedirectUrl: payload.configCompleteRedirectUri,
+      } as GoogleChatEvent,
+    };
+  }
+
+  return { addOnBearerToken, event: null };
+}
 
 function parseGoogleChatInboundPayload(
   raw: unknown,
@@ -49,31 +185,13 @@ function parseGoogleChatInboundPayload(
   let eventPayload = raw;
   let addOnBearerToken = "";
 
-  // Transform Google Workspace Add-on format to standard Chat API format.
-  const rawObj = raw as {
-    commonEventObject?: { hostApp?: string };
-    chat?: {
-      messagePayload?: { space?: GoogleChatSpace; message?: GoogleChatMessage };
-      user?: GoogleChatUser;
-      eventTime?: string;
-    };
-    authorizationEventObject?: { systemIdToken?: string };
-  };
-
-  if (rawObj.commonEventObject?.hostApp === "CHAT" && rawObj.chat?.messagePayload) {
-    const chat = rawObj.chat;
-    const messagePayload = chat.messagePayload;
-    eventPayload = {
-      type: "MESSAGE",
-      space: messagePayload?.space,
-      message: messagePayload?.message,
-      user: chat.user,
-      eventTime: chat.eventTime,
-    };
-    addOnBearerToken =
-      typeof rawObj.authorizationEventObject?.systemIdToken === "string"
-        ? rawObj.authorizationEventObject.systemIdToken.trim()
-        : "";
+  const addOnPayload = normalizeGoogleChatAddOnPayload(raw as GoogleChatAddOnEventObject);
+  if (addOnPayload) {
+    addOnBearerToken = addOnPayload.addOnBearerToken;
+    if (!addOnPayload.event) {
+      return { ok: true, event: null, addOnBearerToken };
+    }
+    eventPayload = addOnPayload.event;
   }
 
   const event = eventPayload as GoogleChatEvent;
@@ -132,6 +250,12 @@ function logGoogleChatWebhookAuthRejectedForTargets(
   reason: string,
 ): void {
   logGoogleChatWebhookAuthRejections(targets.map((target) => ({ target, reason })));
+}
+
+function acknowledgeGoogleChatWebhook(res: ServerResponse): void {
+  res.statusCode = 200;
+  res.setHeader("Content-Type", "application/json");
+  res.end("{}");
 }
 
 async function resolveGoogleChatWebhookTargetWithAuthOrReject(params: {
@@ -236,6 +360,10 @@ export function createGoogleChatWebhookRequestHandler(params: {
           if (!parsed) {
             return true;
           }
+          if (!parsed.event) {
+            acknowledgeGoogleChatWebhook(res);
+            return true;
+          }
           parsedEvent = parsed.event;
         } else {
           const parsed = await readAndParseEvent("pre-auth");
@@ -259,6 +387,10 @@ export function createGoogleChatWebhookRequestHandler(params: {
           if (!selectedTarget) {
             return true;
           }
+          if (!parsed.event) {
+            acknowledgeGoogleChatWebhook(res);
+            return true;
+          }
         }
 
         if (!selectedTarget || !parsedEvent) {
@@ -275,9 +407,7 @@ export function createGoogleChatWebhookRequestHandler(params: {
           );
         });
 
-        res.statusCode = 200;
-        res.setHeader("Content-Type", "application/json");
-        res.end("{}");
+        acknowledgeGoogleChatWebhook(res);
         return true;
       },
     });
