@@ -218,6 +218,14 @@ function resolveProviderLabel(rawProvider: string | undefined): string {
   return `${providerKey.at(0)?.toUpperCase() ?? ""}${providerKey.slice(1)}`;
 }
 
+/**
+ * Builds trusted group/channel delivery guidance.
+ *
+ * Human-supplied room names, members, and history are rendered separately as
+ * untrusted inbound context. In legacy automatic delivery, normal text final
+ * replies are posted automatically, but files/images/attachments may still use
+ * message(action=send) to reach the same group/topic.
+ */
 export function buildGroupChatContext(params: {
   sessionCtx: TemplateContext;
   sourceReplyDeliveryMode?: SourceReplyDeliveryMode;
@@ -236,7 +244,7 @@ export function buildGroupChatContext(params: {
     );
   } else {
     lines.push(
-      "Your replies are automatically sent to this group chat. Do not use the message tool to send to this same group - just reply normally.",
+      "Your text replies are automatically sent to this group chat. For ordinary text, do not use the message tool to send to this same group; just reply normally. Use message(action=send) only when you need to send files, images, or other attachments to this same group/topic.",
     );
   }
   lines.push(
