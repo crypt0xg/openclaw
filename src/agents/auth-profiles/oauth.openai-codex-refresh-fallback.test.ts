@@ -85,6 +85,16 @@ function mockRotatedOpenAICodexRefresh() {
   });
 }
 
+function transientOAuthRefreshError() {
+  return Object.assign(new Error("OAuth provider returned 503 Service Unavailable"), {
+    status: 503,
+  });
+}
+
+function maskedOpenAICodexRefreshError() {
+  return new Error("Failed to refresh OpenAI Codex token");
+}
+
 function resolveOpenAICodexProfile(params: { profileId: string; agentDir: string }) {
   return resolveApiKeyForProfile({
     store: ensureAuthProfileStore(params.agentDir),
@@ -221,6 +231,65 @@ describe("resolveApiKeyForProfile openai-codex refresh fallback", () => {
       refresh: "rotated-refresh-token",
       accountId: "acct-rotated",
     });
+  });
+
+  it("retries a transient provider refresh failure before persisting rotated credentials", async () => {
+    const profileId = "openai-codex:default";
+    saveAuthProfileStore(
+      createExpiredOauthStore({
+        profileId,
+        provider: "openai-codex",
+        access: "stale-access-token",
+      }),
+      agentDir,
+    );
+    refreshProviderOAuthCredentialWithPluginMock
+      .mockRejectedValueOnce(maskedOpenAICodexRefreshError())
+      .mockResolvedValueOnce({
+        type: "oauth",
+        provider: "openai-codex",
+        access: "retried-access-token",
+        refresh: "retried-refresh-token",
+        expires: Date.now() + 86_400_000,
+        accountId: "acct-retried",
+      });
+
+    const result = await resolveOpenAICodexProfile({ profileId, agentDir });
+
+    expect(result).toEqual({
+      apiKey: "retried-access-token",
+      provider: "openai-codex",
+      email: undefined,
+    });
+    expect(refreshProviderOAuthCredentialWithPluginMock).toHaveBeenCalledTimes(2);
+
+    const persisted = await readPersistedStore(agentDir);
+    expect(persisted.profiles[profileId]).toMatchObject({
+      type: "oauth",
+      provider: "openai-codex",
+      access: "retried-access-token",
+      refresh: "retried-refresh-token",
+      accountId: "acct-retried",
+    });
+  });
+
+  it("surfaces the transient provider refresh failure after retry exhaustion", async () => {
+    const profileId = "openai-codex:default";
+    saveAuthProfileStore(
+      createExpiredOauthStore({
+        profileId,
+        provider: "openai-codex",
+        access: "stale-access-token",
+      }),
+      agentDir,
+    );
+    refreshProviderOAuthCredentialWithPluginMock.mockRejectedValue(transientOAuthRefreshError());
+
+    await expect(resolveOpenAICodexProfile({ profileId, agentDir })).rejects.toThrow(
+      /OAuth token refresh failed for openai-codex/,
+    );
+
+    expect(refreshProviderOAuthCredentialWithPluginMock).toHaveBeenCalledTimes(3);
   });
 
   it("refreshes imported Codex credentials into the canonical auth store without writing back to .codex", async () => {
@@ -561,5 +630,7 @@ describe("resolveApiKeyForProfile openai-codex refresh fallback", () => {
         agentDir,
       }),
     ).rejects.toThrow(/OAuth token refresh failed for openai-codex/);
+    expect(refreshProviderOAuthCredentialWithPluginMock).toHaveBeenCalledTimes(1);
+    expect(getOAuthApiKeyMock).not.toHaveBeenCalled();
   });
 });

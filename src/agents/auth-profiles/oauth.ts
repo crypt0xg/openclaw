@@ -8,6 +8,7 @@ import { getRuntimeConfig } from "../../config/config.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { coerceSecretRef } from "../../config/types.secrets.js";
 import { formatErrorMessage } from "../../infra/errors.js";
+import { retryAsync } from "../../infra/retry.js";
 import {
   formatProviderAuthProfileApiKeyWithPlugin,
   refreshProviderOAuthCredentialWithPlugin,
@@ -122,6 +123,112 @@ export function isRefreshTokenReusedError(error: unknown): boolean {
   );
 }
 
+const OAUTH_REFRESH_RETRY_ATTEMPTS = 3;
+const OAUTH_REFRESH_RETRY_MIN_DELAY_MS = 100;
+const OAUTH_REFRESH_RETRY_MAX_DELAY_MS = 500;
+
+const TRANSIENT_OAUTH_REFRESH_STATUS_CODES = new Set([408, 425, 429, 500, 502, 503, 504]);
+const TRANSIENT_OAUTH_REFRESH_ERRNO_CODES = new Set([
+  "eai_again",
+  "econnaborted",
+  "econnrefused",
+  "econnreset",
+  "enetdown",
+  "enetreset",
+  "enotfound",
+  "etimedout",
+  "socketerror",
+  "timeout",
+]);
+
+const PERMANENT_OAUTH_REFRESH_ERROR_RE =
+  /\b(access_denied|expired or revoked|invalid refresh token|invalid_client|invalid_grant|revoked|sign in again|signing in again|unauthorized_client|unsupported_country_region_territory|unsupported_grant_type)\b/i;
+
+const TRANSIENT_OAUTH_REFRESH_MESSAGE_RE =
+  /\b(429|500|502|503|504|bad gateway|fetch failed|gateway timeout|internal server error|network error|rate limit|service unavailable|socket hang up|temporarily unavailable|timeout|timed out|too many requests)\b/i;
+
+function collectErrorObjects(error: unknown): Record<string, unknown>[] {
+  const objects: Record<string, unknown>[] = [];
+  let current = error;
+  const seen = new Set<unknown>();
+  while (current && typeof current === "object" && !seen.has(current)) {
+    seen.add(current);
+    const record = current as Record<string, unknown>;
+    objects.push(record);
+    const response = record.response;
+    if (response && typeof response === "object" && !seen.has(response)) {
+      objects.push(response as Record<string, unknown>);
+      seen.add(response);
+    }
+    current = record.cause;
+  }
+  return objects;
+}
+
+function readFiniteInteger(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.trunc(value);
+  }
+  if (typeof value !== "string" || !/^\d+$/.test(value.trim())) {
+    return undefined;
+  }
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function hasTransientOAuthRefreshStatusCode(error: unknown): boolean {
+  for (const object of collectErrorObjects(error)) {
+    for (const key of ["status", "statusCode", "code"]) {
+      const statusCode = readFiniteInteger(object[key]);
+      if (statusCode !== undefined && TRANSIENT_OAUTH_REFRESH_STATUS_CODES.has(statusCode)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function hasTransientOAuthRefreshErrnoCode(error: unknown): boolean {
+  for (const object of collectErrorObjects(error)) {
+    const code = normalizeLowercaseStringOrEmpty(
+      typeof object.code === "string" || typeof object.code === "number"
+        ? String(object.code)
+        : undefined,
+    );
+    if (code && TRANSIENT_OAUTH_REFRESH_ERRNO_CODES.has(code)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function isTransientOAuthRefreshError(error: unknown): boolean {
+  if (isRefreshTokenReusedError(error)) {
+    return false;
+  }
+  const message = extractErrorMessage(error);
+  if (PERMANENT_OAUTH_REFRESH_ERROR_RE.test(message)) {
+    return false;
+  }
+  return (
+    hasTransientOAuthRefreshStatusCode(error) ||
+    hasTransientOAuthRefreshErrnoCode(error) ||
+    TRANSIENT_OAUTH_REFRESH_MESSAGE_RE.test(message)
+  );
+}
+
+function shouldRetryOAuthRefreshError(provider: string, error: unknown): boolean {
+  if (isTransientOAuthRefreshError(error)) {
+    return true;
+  }
+  // pi-ai currently masks Codex HTTP/fetch refresh failures behind this exact message.
+  return (
+    provider === "openai-codex" &&
+    normalizeLowercaseStringOrEmpty(extractErrorMessage(error)) ===
+      "failed to refresh openai codex token"
+  );
+}
+
 type ResolveApiKeyForProfileParams = {
   cfg?: OpenClawConfig;
   store: AuthProfileStore;
@@ -132,6 +239,27 @@ type ResolveApiKeyForProfileParams = {
 type SecretDefaults = NonNullable<OpenClawConfig["secrets"]>["defaults"];
 
 async function refreshOAuthCredential(
+  credential: OAuthCredential,
+): Promise<OAuthCredentials | null> {
+  return await retryAsync(() => refreshOAuthCredentialOnce(credential), {
+    label: `oauth refresh ${credential.provider}`,
+    attempts: OAUTH_REFRESH_RETRY_ATTEMPTS,
+    minDelayMs: OAUTH_REFRESH_RETRY_MIN_DELAY_MS,
+    maxDelayMs: OAUTH_REFRESH_RETRY_MAX_DELAY_MS,
+    shouldRetry: (error) => shouldRetryOAuthRefreshError(credential.provider, error),
+    onRetry: (info) => {
+      log.debug("retrying transient OAuth refresh failure", {
+        provider: credential.provider,
+        attempt: info.attempt,
+        maxAttempts: info.maxAttempts,
+        delayMs: info.delayMs,
+        error: formatErrorMessage(info.err),
+      });
+    },
+  });
+}
+
+async function refreshOAuthCredentialOnce(
   credential: OAuthCredential,
 ): Promise<OAuthCredentials | null> {
   const pluginRefreshed = await refreshProviderOAuthCredentialWithPlugin({

@@ -4,7 +4,7 @@ import {
   randomAsciiString as randomJunk,
   randomlyCased,
 } from "./oauth-test-utils.js";
-import { isRefreshTokenReusedError } from "./oauth.js";
+import { isRefreshTokenReusedError, isTransientOAuthRefreshError } from "./oauth.js";
 
 // Direct tests for the refresh_token_reused classifier. This is the gate that
 // triggers the retry/adoption recovery path; a false negative here means we
@@ -133,5 +133,23 @@ describe("isRefreshTokenReusedError", () => {
         expect(isRefreshTokenReusedError(new Error(msg))).toBe(false);
       }
     });
+  });
+});
+
+describe("isTransientOAuthRefreshError", () => {
+  it("classifies provider/network retry signals as transient", () => {
+    expect(
+      isTransientOAuthRefreshError(
+        Object.assign(new Error("provider unavailable"), { status: 503 }),
+      ),
+    ).toBe(true);
+    expect(
+      isTransientOAuthRefreshError(Object.assign(new Error("fetch failed"), { code: "EAI_AGAIN" })),
+    ).toBe(true);
+  });
+
+  it("keeps permanent OAuth refresh failures out of the transient retry path", () => {
+    expect(isTransientOAuthRefreshError(new Error("invalid_grant"))).toBe(false);
+    expect(isTransientOAuthRefreshError(new Error("refresh_token_reused"))).toBe(false);
   });
 });
