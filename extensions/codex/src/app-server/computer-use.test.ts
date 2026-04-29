@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ensureCodexComputerUse,
   installCodexComputerUse,
@@ -12,8 +12,13 @@ import {
 describe("Codex Computer Use setup", () => {
   const cleanupPaths: string[] = [];
 
+  beforeEach(() => {
+    vi.stubEnv("OPENCLAW_MAC_NATIVE_HOST", "1");
+  });
+
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllEnvs();
     for (const cleanupPath of cleanupPaths.splice(0)) {
       fs.rmSync(cleanupPath, { recursive: true, force: true });
     }
@@ -28,6 +33,50 @@ describe("Codex Computer Use setup", () => {
         ready: false,
         reason: "disabled",
         message: "Computer Use is disabled.",
+      }),
+    );
+  });
+
+  it("requires the OpenClaw.app native host on macOS before contacting app-server", async () => {
+    const request = vi.fn();
+
+    await expect(
+      readCodexComputerUseStatus({
+        pluginConfig: { computerUse: { enabled: true } },
+        platform: "darwin",
+        env: {},
+        request,
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        enabled: true,
+        ready: false,
+        reason: "native_host_missing",
+        installed: false,
+        pluginEnabled: false,
+        mcpServerAvailable: false,
+        message:
+          "Computer Use on macOS requires OpenClaw.app to host the Gateway so macOS can grant desktop-control permissions to the native app. Open OpenClaw.app in Local mode, then run /codex computer-use install again.",
+      }),
+    );
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it("allows explicit non-native macOS setup for diagnostics", async () => {
+    const request = createComputerUseRequest({ installed: true });
+
+    await expect(
+      readCodexComputerUseStatus({
+        pluginConfig: { computerUse: { enabled: true, marketplaceName: "desktop-tools" } },
+        platform: "darwin",
+        env: { OPENCLAW_CODEX_COMPUTER_USE_ALLOW_NON_NATIVE_HOST: "1" },
+        request,
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        ready: true,
+        reason: "ready",
+        message: "Computer Use is ready.",
       }),
     );
   });

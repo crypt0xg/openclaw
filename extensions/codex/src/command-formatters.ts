@@ -91,6 +91,13 @@ export function formatAccount(
 }
 
 export function formatComputerUseStatus(status: CodexComputerUseStatus): string {
+  if (status.reason === "native_host_missing") {
+    return [
+      "Computer Use: native host required",
+      `Gateway host: OpenClaw.app required on macOS`,
+      status.message,
+    ].join("\n");
+  }
   const lines = [
     `Computer Use: ${status.ready ? "ready" : status.enabled ? "not ready" : "disabled"}`,
   ];

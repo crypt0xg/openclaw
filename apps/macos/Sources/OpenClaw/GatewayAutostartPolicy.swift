@@ -7,8 +7,14 @@ enum GatewayAutostartPolicy {
 
     static func shouldEnsureLaunchAgent(
         mode: AppState.ConnectionMode,
-        paused: Bool) -> Bool
+        paused: Bool,
+        defaults: UserDefaults = .standard,
+        environment: [String: String] = ProcessInfo.processInfo.environment) -> Bool
     {
-        self.shouldStartGateway(mode: mode, paused: paused)
+        self.shouldStartGateway(mode: mode, paused: paused) &&
+            !GatewayNativeHostPolicy.shouldPreferNativeHost(
+                mode: mode,
+                defaults: defaults,
+                environment: environment)
     }
 }

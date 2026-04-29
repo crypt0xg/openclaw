@@ -42,6 +42,8 @@ final class GatewayProcessManager {
     private var environmentRefreshTask: Task<Void, Never>?
     private var lastEnvironmentRefresh: Date?
     private var logRefreshTask: Task<Void, Never>?
+    private var nativeGatewayProcess: Process?
+    private var nativeGatewayOutputPipes: [Pipe] = []
     #if DEBUG
     private var testingConnection: GatewayConnection?
     private var testingSkipControlChannelRefresh = false
@@ -80,6 +82,11 @@ final class GatewayProcessManager {
 
     func ensureLaunchAgentEnabledIfNeeded() async {
         guard !CommandResolver.connectionModeIsRemote() else { return }
+        if self.prefersNativeHostedGateway() {
+            self.appendLog("[gateway] native host active; launchd auto-enable skipped\n")
+            self.logger.info("gateway launchd auto-enable skipped (native host active)")
+            return
+        }
         if GatewayLaunchAgentManager.isLaunchAgentWriteDisabled() {
             self.appendLog("[gateway] launchd auto-enable skipped (attach-only)\n")
             self.logger.info("gateway launchd auto-enable skipped (disable marker set)")
@@ -117,6 +124,14 @@ final class GatewayProcessManager {
         // First try to latch onto an already-running gateway to avoid spawning a duplicate.
         Task { [weak self] in
             guard let self else { return }
+            if self.prefersNativeHostedGateway() {
+                await self.stopLaunchdGatewayForNativeHostIfNeeded()
+                if await self.attachExistingGatewayIfAvailable() {
+                    return
+                }
+                await self.startNativeGateway()
+                return
+            }
             if await self.attachExistingGatewayIfAvailable() {
                 return
             }
@@ -130,6 +145,7 @@ final class GatewayProcessManager {
         self.lastFailureReason = nil
         self.status = .stopped
         self.logger.info("gateway stop requested")
+        self.stopNativeGateway()
         if CommandResolver.connectionModeIsRemote() {
             return
         }
@@ -171,6 +187,7 @@ final class GatewayProcessManager {
 
     func refreshLog() {
         guard self.logRefreshTask == nil else { return }
+        guard self.nativeGatewayProcess == nil else { return }
         let path = GatewayLaunchAgentManager.launchdGatewayLogPath()
         let limit = self.logLimit
         self.logRefreshTask = Task { [weak self] in
@@ -355,6 +372,152 @@ final class GatewayProcessManager {
         self.status = .failed("Gateway did not start in time")
         self.lastFailureReason = "launchd start timeout"
         self.logger.warning("gateway start timed out")
+    }
+
+    private func prefersNativeHostedGateway() -> Bool {
+        GatewayNativeHostPolicy.shouldPreferNativeHost(
+            mode: .local,
+            defaults: .standard,
+            environment: ProcessInfo.processInfo.environment)
+    }
+
+    private func stopLaunchdGatewayForNativeHostIfNeeded() async {
+        guard !GatewayLaunchAgentManager.isLaunchAgentWriteDisabled() else {
+            self.appendLog(
+                "[gateway] launchd stop skipped (attach-only); " +
+                    "native host will attach if a listener is present\n")
+            return
+        }
+        guard await GatewayLaunchAgentManager.isLoaded() else { return }
+        let bundlePath = Bundle.main.bundleURL.path
+        self.appendLog("[gateway] disabling launchd job before native host start\n")
+        let err = await GatewayLaunchAgentManager.set(
+            enabled: false,
+            bundlePath: bundlePath,
+            port: GatewayEnvironment.gatewayPort())
+        if let err {
+            self.appendLog("[gateway] launchd disable before native host failed: \(err)\n")
+        }
+    }
+
+    private func startNativeGateway() async {
+        self.existingGatewayDetails = nil
+        let resolution = await Task.detached(priority: .utility) {
+            GatewayEnvironment.resolveGatewayCommand()
+        }.value
+        self.environmentStatus = resolution.status
+        guard let command = resolution.command, let executable = command.first else {
+            self.status = .failed(resolution.status.message)
+            self.lastFailureReason = resolution.status.message
+            self.logger.error("native gateway command resolve failed: \(resolution.status.message)")
+            return
+        }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executable)
+        process.arguments = Array(command.dropFirst())
+        process.environment = self.nativeGatewayEnvironment()
+
+        let outputPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = errorPipe
+        self.installNativeGatewayOutputHandler(pipe: outputPipe, label: "stdout")
+        self.installNativeGatewayOutputHandler(pipe: errorPipe, label: "stderr")
+
+        process.terminationHandler = { [weak self] terminated in
+            Task { @MainActor [weak self] in
+                guard let self, self.nativeGatewayProcess === terminated else { return }
+                self.nativeGatewayProcess = nil
+                for pipe in self.nativeGatewayOutputPipes {
+                    pipe.fileHandleForReading.readabilityHandler = nil
+                }
+                self.nativeGatewayOutputPipes.removeAll()
+                let status = terminated.terminationStatus
+                self.appendLog("[gateway] native-hosted gateway exited with status \(status)\n")
+                if self.desiredActive {
+                    let message = "Native-hosted Gateway exited with status \(status)"
+                    self.status = .failed(message)
+                    self.lastFailureReason = message
+                }
+            }
+        }
+
+        do {
+            try process.run()
+        } catch {
+            let message = "Native-hosted Gateway failed to start: \(error.localizedDescription)"
+            self.status = .failed(message)
+            self.lastFailureReason = message
+            self.appendLog("[gateway] \(message)\n")
+            self.logger.error("\(message, privacy: .public)")
+            return
+        }
+
+        self.nativeGatewayProcess = process
+        self.nativeGatewayOutputPipes = [outputPipe, errorPipe]
+        let port = GatewayEnvironment.gatewayPort()
+        self.appendLog("[gateway] started native-hosted gateway pid \(process.processIdentifier) on port \(port)\n")
+        self.logger.info("native-hosted gateway started pid=\(process.processIdentifier)")
+
+        let deadline = Date().addingTimeInterval(6)
+        while Date() < deadline {
+            if !self.desiredActive { return }
+            if !process.isRunning {
+                let message = "Native-hosted Gateway exited before readiness"
+                self.status = .failed(message)
+                self.lastFailureReason = message
+                return
+            }
+            do {
+                _ = try await self.connection.requestRaw(method: .health, timeoutMs: 1500)
+                let details = "native host, pid \(process.processIdentifier)"
+                self.clearLastFailure()
+                self.status = .running(details: details)
+                self.logger.info("native-hosted gateway ready details=\(details)")
+                self.refreshControlChannelIfNeeded(reason: "native gateway started")
+                return
+            } catch {
+                try? await Task.sleep(nanoseconds: 400_000_000)
+            }
+        }
+
+        self.status = .failed("Native-hosted Gateway did not start in time")
+        self.lastFailureReason = "native gateway start timeout"
+        self.stopNativeGateway()
+        self.logger.warning("native-hosted gateway start timed out")
+    }
+
+    private func nativeGatewayEnvironment() -> [String: String] {
+        var env = ProcessInfo.processInfo.environment
+        env["PATH"] = CommandResolver.preferredPaths().joined(separator: ":")
+        env["OPENCLAW_MAC_NATIVE_HOST"] = "1"
+        env["OPENCLAW_MAC_NATIVE_HOST_BUNDLE_ID"] = Bundle.main.bundleIdentifier ?? launchdLabel
+        env["OPENCLAW_GATEWAY_SUPERVISOR"] = "openclaw-macos-app"
+        return env
+    }
+
+    private func installNativeGatewayOutputHandler(pipe: Pipe, label: String) {
+        pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            let data = handle.availableData
+            guard !data.isEmpty else { return }
+            let text = String(data: data, encoding: .utf8) ?? "<\(data.count) bytes>\n"
+            Task { @MainActor [weak self] in
+                self?.appendLog("[gateway \(label)] \(text)")
+            }
+        }
+    }
+
+    private func stopNativeGateway() {
+        let process = self.nativeGatewayProcess
+        self.nativeGatewayProcess = nil
+        for pipe in self.nativeGatewayOutputPipes {
+            pipe.fileHandleForReading.readabilityHandler = nil
+        }
+        self.nativeGatewayOutputPipes.removeAll()
+        guard let process, process.isRunning else { return }
+        self.appendLog("[gateway] stopping native-hosted gateway pid \(process.processIdentifier)\n")
+        process.terminate()
     }
 
     private func appendLog(_ chunk: String) {

@@ -18,6 +18,7 @@ export type CodexComputerUseRequest = <T = JsonValue | undefined>(
 
 export type CodexComputerUseStatusReason =
   | "disabled"
+  | "native_host_missing"
   | "marketplace_missing"
   | "plugin_not_installed"
   | "plugin_disabled"
@@ -61,6 +62,8 @@ export type CodexComputerUseSetupParams = {
   signal?: AbortSignal;
   forceEnable?: boolean;
   defaultBundledMarketplacePath?: string;
+  env?: NodeJS.ProcessEnv;
+  platform?: NodeJS.Platform;
 };
 
 type MarketplaceRef =
@@ -132,6 +135,9 @@ export async function ensureCodexComputerUse(
   if (status.ready) {
     return status;
   }
+  if (status.reason === "native_host_missing") {
+    throw new CodexComputerUseSetupError(status);
+  }
   if (config.autoInstall) {
     const blockedAutoInstallStatus = blockUnsafeAutoInstallStatus(config);
     if (blockedAutoInstallStatus) {
@@ -181,7 +187,18 @@ async function inspectCodexComputerUse(params: {
   config: ResolvedCodexComputerUseConfig;
   installPlugin: boolean;
   defaultBundledMarketplacePath?: string;
+  env?: NodeJS.ProcessEnv;
+  platform?: NodeJS.Platform;
 }): Promise<CodexComputerUseStatus> {
+  const nativeHostStatus = macNativeHostUnavailableStatus({
+    config: params.config,
+    env: params.env,
+    platform: params.platform,
+  });
+  if (nativeHostStatus) {
+    return nativeHostStatus;
+  }
+
   const request = createComputerUseRequest(params);
   if (params.installPlugin) {
     await request<v2.ExperimentalFeatureEnablementSetResponse>(
@@ -415,6 +432,37 @@ function blockUnsafeAutoInstallStatus(
     "auto_install_blocked",
     "Computer Use auto-install only uses marketplaces Codex app-server has already discovered. Run /codex computer-use install to install from a configured marketplace source.",
   );
+}
+
+function macNativeHostUnavailableStatus(params: {
+  config: ResolvedCodexComputerUseConfig;
+  env?: NodeJS.ProcessEnv;
+  platform?: NodeJS.Platform;
+}): CodexComputerUseStatus | undefined {
+  const platform = params.platform ?? process.platform;
+  if (platform !== "darwin") {
+    return undefined;
+  }
+  const env = params.env ?? process.env;
+  if (isTruthyEnvFlag(env.OPENCLAW_MAC_NATIVE_HOST)) {
+    return undefined;
+  }
+  if (isTruthyEnvFlag(env.OPENCLAW_CODEX_COMPUTER_USE_ALLOW_NON_NATIVE_HOST)) {
+    return undefined;
+  }
+  return unavailableStatus(
+    params.config,
+    "native_host_missing",
+    "Computer Use on macOS requires OpenClaw.app to host the Gateway so macOS can grant desktop-control permissions to the native app. Open OpenClaw.app in Local mode, then run /codex computer-use install again.",
+  );
+}
+
+function isTruthyEnvFlag(value: string | undefined): boolean {
+  if (!value) {
+    return false;
+  }
+  const normalized = value.trim().toLowerCase();
+  return normalized !== "" && !["0", "false", "no", "off"].includes(normalized);
 }
 
 function shouldAddBundledComputerUseMarketplace(params: {

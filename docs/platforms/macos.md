@@ -6,9 +6,9 @@ read_when:
 title: "macOS app"
 ---
 
-The macOS app is the **menu‑bar companion** for OpenClaw. It owns permissions,
-manages/attaches to the Gateway locally (launchd or manual), and exposes macOS
-capabilities to the agent as a node.
+The macOS app is the **menu-bar companion** for OpenClaw. It owns permissions,
+manages/attaches to the Gateway locally (native host, launchd, or manual), and
+exposes macOS capabilities to the agent as a node.
 
 ## What it does
 
@@ -23,18 +23,47 @@ capabilities to the agent as a node.
 
 ## Local vs remote mode
 
-- **Local** (default): the app attaches to a running local Gateway if present;
-  otherwise it enables the launchd service via `openclaw gateway install`.
+- **Local** (default): the app hosts the Gateway as a child process under
+  OpenClaw.app when no compatible Gateway is already running. This gives macOS
+  TCC a native app identity for permission-sensitive desktop features such as
+  Codex Computer Use.
 - **Remote**: the app connects to a Gateway over SSH/Tailscale and never starts
   a local process.
   The app starts the local **node host service** so the remote Gateway can reach this Mac.
-  The app does not spawn the Gateway as a child process.
+  The app does not spawn the Gateway as a child process in remote mode.
   Gateway discovery now prefers Tailscale MagicDNS names over raw tailnet IPs,
   so the Mac app recovers more reliably when tailnet IPs change.
 
+Set `OPENCLAW_MAC_NATIVE_GATEWAY=launchd` before launching the app to use the
+legacy launchd fallback in local mode. Launchd is still useful for headless
+Gateway service management, but permission-sensitive Computer Use flows should
+run through the native-hosted Gateway.
+
+## Native Gateway host
+
+In native-host mode, OpenClaw.app starts the same Node Gateway command that the
+CLI would run, marks the child environment with `OPENCLAW_MAC_NATIVE_HOST=1`,
+and supervises its logs/readiness from the menu bar. Codex still runs inside the
+Gateway; OpenClaw.app is the macOS identity and lifecycle parent, not a Codex
+runtime replacement.
+
+This shape keeps the runtime architecture stable:
+
+```text
+OpenClaw.app native host
+  -> OpenClaw Gateway
+      -> Codex app-server
+          -> Codex Computer Use MCP
+```
+
+The app disables its managed launchd Gateway before starting a native-hosted
+Gateway so the local port does not stay occupied by a background Node lineage.
+If an unmanaged listener is already on the Gateway port, the app attaches to it
+and reports that existing instance instead of replacing it.
+
 ## Launchd control
 
-The app manages a per‑user LaunchAgent labeled `ai.openclaw.gateway`
+The app can manage a per-user LaunchAgent labeled `ai.openclaw.gateway`
 (or `ai.openclaw.<profile>` when using `--profile`/`OPENCLAW_PROFILE`; legacy `com.openclaw.*` still unloads).
 
 ```bash
@@ -44,8 +73,9 @@ launchctl bootout gui/$UID/ai.openclaw.gateway
 
 Replace the label with `ai.openclaw.<profile>` when running a named profile.
 
-If the LaunchAgent isn’t installed, enable it from the app or run
-`openclaw gateway install`.
+If the LaunchAgent is not installed, run `openclaw gateway install`. Local mode
+normally uses the native host first; launchd remains the fallback for headless
+service installs and explicit `OPENCLAW_MAC_NATIVE_GATEWAY=launchd` sessions.
 
 ## Node capabilities (mac)
 

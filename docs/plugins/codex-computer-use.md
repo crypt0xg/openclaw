@@ -19,6 +19,27 @@ then lets Codex own the native MCP tool calls during Codex-mode turns.
 Use this page when OpenClaw is already using the native Codex harness. For the
 runtime setup itself, see [Codex harness](/plugins/codex-harness).
 
+## macOS native host
+
+On macOS, Codex Computer Use must run from a Gateway that OpenClaw.app launched
+in native-host mode. macOS grants Accessibility, Screen Recording, and
+Automation permissions to a responsible app identity, not to an abstract chat
+session. A launchd-started Gateway runs from a headless Node lineage, which can
+leave Codex Computer Use blocked by TCC even when the user already approved the
+prompts in the app.
+
+The supported local shape is:
+
+```text
+OpenClaw.app native host
+  -> OpenClaw Gateway
+      -> Codex app-server
+          -> Codex Computer Use MCP
+```
+
+Codex still lives inside the Gateway. OpenClaw.app only provides the macOS
+identity and lifecycle parent needed for desktop permissions.
+
 ## OpenClaw.app and Peekaboo
 
 OpenClaw.app's Peekaboo integration is separate from Codex Computer Use. The
@@ -114,6 +135,12 @@ register the bundled Codex marketplace from
 `/Applications/Codex.app/Contents/Resources/plugins/openai-bundled` before it
 fails. If setup still cannot make the MCP server available, the turn fails
 before the thread starts.
+
+On macOS, setup first verifies that the Gateway was launched by OpenClaw.app in
+native-host mode. If not, `/codex computer-use status` reports
+`native_host_missing` and does not contact Codex app-server. Open OpenClaw.app,
+switch to Local mode, wait for the Gateway to show running, then run
+`/codex computer-use install` again.
 
 Existing sessions keep their runtime and Codex thread binding. After changing
 `agentRuntime` or Computer Use config, use `/new` or `/reset` in the affected
@@ -229,6 +256,7 @@ status for chat:
 | Reason                       | Meaning                                                | Next step                                     |
 | ---------------------------- | ------------------------------------------------------ | --------------------------------------------- |
 | `disabled`                   | `computerUse.enabled` resolved to false.               | Set `enabled` or another Computer Use field.  |
+| `native_host_missing`        | macOS Gateway is not hosted by OpenClaw.app.           | Start Local mode from OpenClaw.app.           |
 | `marketplace_missing`        | No matching marketplace was available.                 | Configure source, path, or marketplace name.  |
 | `plugin_not_installed`       | Marketplace exists, but the plugin is not installed.   | Run install or enable `autoInstall`.          |
 | `plugin_disabled`            | Plugin is installed but disabled in Codex config.      | Run install to re-enable it.                  |
@@ -244,9 +272,10 @@ when available, and the specific message for the failing setup step.
 ## macOS permissions
 
 Computer Use is macOS-specific. The Codex-owned MCP server may need local OS
-permissions before it can inspect or control apps. If OpenClaw says Computer Use
-is installed but the MCP server is unavailable, verify the Codex-side Computer
-Use setup first:
+permissions before it can inspect or control apps. If OpenClaw says the native
+host is missing, fix the Gateway host first. If OpenClaw says Computer Use is
+installed but the MCP server is unavailable, verify the Codex-side Computer Use
+setup next:
 
 - Codex app-server is running on the same host where desktop control should
   happen.
@@ -271,14 +300,19 @@ Codex app-server install writes the plugin config back to enabled.
 path. Remote-only catalog entries can be inspected but not installed through the
 current app-server API.
 
+**Status says native host is required.** Launch OpenClaw.app, use Local mode,
+and let the app start the Gateway. The launchd fallback is fine for ordinary
+chat and service use, but Codex Computer Use on macOS needs the native app
+identity.
+
 **Status says the MCP server is unavailable.** Re-run install once so MCP
 servers reload. If it remains unavailable, fix the Codex Computer Use app,
 Codex app-server MCP status, or macOS permissions.
 
 **Status or a probe times out on `computer-use.list_apps`.** The plugin and MCP
 server are present, but the local Computer Use bridge did not answer. Quit or
-restart Codex Computer Use, relaunch Codex Desktop if needed, then retry in a
-fresh OpenClaw session.
+restart Codex Computer Use, confirm OpenClaw.app still owns the local Gateway,
+then retry in a fresh OpenClaw session.
 
 **A Computer Use tool says `Native hook relay unavailable`.** The Codex-native
 tool hook could not reach an active OpenClaw relay through the local bridge or
