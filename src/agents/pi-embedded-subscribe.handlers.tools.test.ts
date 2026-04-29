@@ -72,23 +72,25 @@ function createTestContext(): {
 }
 
 describe("handleToolExecutionStart read path checks", () => {
-  it("does not warn when read tool uses file_path alias", async () => {
-    const { ctx, warn, onBlockReplyFlush } = createTestContext();
+  it("does not warn when read tool uses common file path aliases", async () => {
+    for (const key of ["file_path", "filePath", "filepath", "file"] as const) {
+      const { ctx, warn, onBlockReplyFlush } = createTestContext();
 
-    const evt: ToolExecutionStartEvent = {
-      type: "tool_execution_start",
-      toolName: "read",
-      toolCallId: "tool-1",
-      args: { file_path: "/tmp/example.txt" },
-    };
+      const evt: ToolExecutionStartEvent = {
+        type: "tool_execution_start",
+        toolName: "read",
+        toolCallId: `tool-${key}`,
+        args: { [key]: "/tmp/example.txt" },
+      };
 
-    await handleToolExecutionStart(ctx, evt);
+      await handleToolExecutionStart(ctx, evt);
 
-    expect(onBlockReplyFlush).toHaveBeenCalledTimes(1);
-    expect(warn).not.toHaveBeenCalled();
+      expect(onBlockReplyFlush).toHaveBeenCalledTimes(1);
+      expect(warn).not.toHaveBeenCalled();
+    }
   });
 
-  it("warns when read tool has neither path nor file_path", async () => {
+  it("warns when read tool has neither path nor file path alias", async () => {
     const { ctx, warn } = createTestContext();
 
     const evt: ToolExecutionStartEvent = {
