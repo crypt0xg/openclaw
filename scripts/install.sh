@@ -1638,6 +1638,7 @@ fix_npm_permissions() {
     ui_info "Configuring npm for user-local installs"
     mkdir -p "$HOME/.npm-global"
     npm config set prefix "$HOME/.npm-global"
+    ui_warn "Avoid sudo npm i -g for future OpenClaw updates; use npm i -g openclaw@latest so npm keeps using this user prefix instead of a different global prefix."
 
     # shellcheck disable=SC2016
     local path_line='export PATH="$HOME/.npm-global/bin:$PATH"'

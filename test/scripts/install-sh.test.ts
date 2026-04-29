@@ -151,10 +151,14 @@ describe("install.sh", () => {
       line.includes("The installer will switch npm's user prefix"),
     );
     const npmSetIndex = lines.findIndex((line) => line.startsWith("npm-set:"));
+    const noSudoWarningIndex = lines.findIndex((line) => line.includes("Avoid sudo npm i -g"));
     expect(warningIndex).toBeGreaterThanOrEqual(0);
     expect(npmSetIndex).toBeGreaterThan(warningIndex);
+    expect(noSudoWarningIndex).toBeGreaterThan(npmSetIndex);
     expect(result?.stdout).toContain("npm global prefix is not writable");
     expect(result?.stdout).toContain("npm normally writes that setting to ~/.npmrc");
+    expect(result?.stdout).toContain("npm i -g openclaw@latest");
+    expect(result?.stdout).toContain("using this user prefix");
     expect(result?.stdout).not.toContain("has been saved");
   });
 });
