@@ -23,7 +23,6 @@ Docs: https://docs.openclaw.ai
 ### Fixes
 
 - Exec: reject invalid per-call `host` values instead of silently falling back to the default target, so hostname-like values fail before commands run. Fixes #74426. Thanks @scr00ge-00 and @vyctorbrzezowski.
-- Compaction: use the active session model fallback chain for implicit summarization failures without persisting fallback model selection, so Azure content-filter 400s can recover. Fixes #64960. (#74470) Thanks @OpenCodeEngineer.
 - Build/Gateway: route restart, shutdown, respawn, diagnostics, command-queue cleanup, and runtime cleanup through one stable gateway lifecycle runtime entry so rebuilt packages do not strand long-running gateways on stale hashed chunks. Carries forward #73964. Thanks @pashpashpash.
 - Memory/wiki: keep broad shared-source and generated related-link blocks from turning every page into a search hit, cap noisy backlinks, support all-term searches such as people-routing queries, and prefer readable page body snippets over generated metadata. Thanks @vincentkoc.
 - Cron/Gateway: abort and bounded-clean up timed-out isolated agent turns before recording the timeout, so stale cron sessions cannot leave Discord or other chat lanes stuck in `processing` after a timeout. Thanks @vincentkoc.
@@ -198,6 +197,7 @@ Docs: https://docs.openclaw.ai
 - Configure/GitHub Copilot: reuse existing Copilot auth during configure and show the provider's manifest model catalog in the model picker. (#74276) Thanks @obviyus.
 - Configure/models: keep the model picker scoped to the selected manifest provider and enable its bundled plugin before catalog lookup, so choosing GitHub Copilot no longer falls back to Ollama or skips the catalog. (#74322) Thanks @obviyus.
 - Auto-reply/subagents: reject `/focus` from leaf subagents and scope fallback target resolution to the requesting subagent's children, so subagents cannot bind conversations outside their control boundary. (#73613) Thanks @drobison00.
+- Compaction: use the active session model fallback chain for implicit summarization failures without persisting fallback model selection, so Azure content-filter 400s can recover. Fixes #64960. (#74470) Thanks @OpenCodeEngineer.
 
 ## 2026.4.27
 
