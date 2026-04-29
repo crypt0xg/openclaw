@@ -18,10 +18,43 @@ vi.mock("../../infra/session-cost-usage.js", async () => {
 });
 
 import { loadCostUsageSummary } from "../../infra/session-cost-usage.js";
-import { __test } from "./usage.js";
+import { __test, usageHandlers } from "./usage.js";
 
 describe("gateway usage helpers", () => {
   const dayMs = 24 * 60 * 60 * 1000;
+  const costSummary = (params: { date?: string; totalTokens: number; totalCost: number }) => ({
+    updatedAt: Date.now(),
+    days: 1,
+    daily: [
+      {
+        date: params.date ?? "2026-02-01",
+        input: params.totalTokens,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: params.totalTokens,
+        totalCost: params.totalCost,
+        inputCost: params.totalCost,
+        outputCost: 0,
+        cacheReadCost: 0,
+        cacheWriteCost: 0,
+        missingCostEntries: 0,
+      },
+    ],
+    totals: {
+      input: params.totalTokens,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: params.totalTokens,
+      totalCost: params.totalCost,
+      inputCost: params.totalCost,
+      outputCost: 0,
+      cacheReadCost: 0,
+      cacheWriteCost: 0,
+      missingCostEntries: 0,
+    },
+  });
 
   beforeEach(() => {
     __test.costUsageCache.clear();
@@ -157,5 +190,52 @@ describe("gateway usage helpers", () => {
     expect(a.totals.totalTokens).toBe(1);
     expect(b.totals.totalTokens).toBe(1);
     expect(vi.mocked(loadCostUsageSummary)).toHaveBeenCalledTimes(1);
+  });
+
+  it("usage.cost aggregates configured agents and scopes cache by agent set", async () => {
+    vi.mocked(loadCostUsageSummary).mockImplementation(async (params) => {
+      if (params?.agentId === "opus") {
+        return costSummary({ totalTokens: 20, totalCost: 0.02 });
+      }
+      return costSummary({ totalTokens: 10, totalCost: 0.01 });
+    });
+
+    const config = {
+      agents: { list: [{ id: "main" }, { id: "opus" }] },
+      session: {},
+    } as OpenClawConfig;
+    const context = { getRuntimeConfig: () => config };
+    const params = { startDate: "2026-02-01", endDate: "2026-02-01", mode: "utc" };
+
+    const aggregateRespond = vi.fn();
+    await usageHandlers["usage.cost"]({
+      respond: aggregateRespond,
+      params,
+      context,
+    } as unknown as Parameters<(typeof usageHandlers)["usage.cost"]>[0]);
+
+    expect(vi.mocked(loadCostUsageSummary)).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(loadCostUsageSummary).mock.calls.map((call) => call[0]?.agentId)).toEqual([
+      "main",
+      "opus",
+    ]);
+    expect(aggregateRespond.mock.calls[0]?.[0]).toBe(true);
+    expect(aggregateRespond.mock.calls[0]?.[1]).toMatchObject({
+      totals: { totalTokens: 30, totalCost: 0.03 },
+      daily: [{ date: "2026-02-01", totalTokens: 30, totalCost: 0.03 }],
+    });
+
+    const mainRespond = vi.fn();
+    await usageHandlers["usage.cost"]({
+      respond: mainRespond,
+      params: { ...params, agentId: "main" },
+      context,
+    } as unknown as Parameters<(typeof usageHandlers)["usage.cost"]>[0]);
+
+    expect(vi.mocked(loadCostUsageSummary)).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(loadCostUsageSummary).mock.calls[2]?.[0]?.agentId).toBe("main");
+    expect(mainRespond.mock.calls[0]?.[1]).toMatchObject({
+      totals: { totalTokens: 10, totalCost: 0.01 },
+    });
   });
 });

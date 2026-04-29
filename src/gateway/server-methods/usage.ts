@@ -21,7 +21,7 @@ import {
   resolveExistingUsageSessionFile,
   type DiscoveredSession,
 } from "../../infra/session-cost-usage.js";
-import { parseAgentSessionKey } from "../../routing/session-key.js";
+import { normalizeAgentId, parseAgentSessionKey } from "../../routing/session-key.js";
 import { resolvePreferredSessionKeyForSessionIdMatches } from "../../sessions/session-id-resolution.js";
 import { normalizeOptionalString } from "../../shared/string-coerce.js";
 import {
@@ -63,6 +63,40 @@ type CostUsageCacheEntry = {
 };
 
 const costUsageCache = new Map<string, CostUsageCacheEntry>();
+
+const emptyCostUsageTotals = (): CostUsageSummary["totals"] => ({
+  input: 0,
+  output: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+  totalTokens: 0,
+  totalCost: 0,
+  inputCost: 0,
+  outputCost: 0,
+  cacheReadCost: 0,
+  cacheWriteCost: 0,
+  missingCostEntries: 0,
+});
+
+function addCostUsageTotals(
+  target: CostUsageSummary["totals"],
+  source: Partial<CostUsageSummary["totals"]> | undefined,
+): void {
+  if (!source) {
+    return;
+  }
+  target.input += source.input ?? 0;
+  target.output += source.output ?? 0;
+  target.cacheRead += source.cacheRead ?? 0;
+  target.cacheWrite += source.cacheWrite ?? 0;
+  target.totalTokens += source.totalTokens ?? 0;
+  target.totalCost += source.totalCost ?? 0;
+  target.inputCost += source.inputCost ?? 0;
+  target.outputCost += source.outputCost ?? 0;
+  target.cacheReadCost += source.cacheReadCost ?? 0;
+  target.cacheWriteCost += source.cacheWriteCost ?? 0;
+  target.missingCostEntries += source.missingCostEntries ?? 0;
+}
 
 function findCostUsageCacheEvictionKey(): string | undefined {
   for (const [key, entry] of costUsageCache) {
@@ -320,12 +354,91 @@ async function discoverAllSessionsForUsage(params: {
   return results.flat().toSorted((a, b) => b.mtime - a.mtime);
 }
 
+function resolveCostUsageAgentIds(config: OpenClawConfig, requestedAgentId?: unknown): string[] {
+  const explicitAgentId = normalizeOptionalString(requestedAgentId);
+  if (explicitAgentId) {
+    return [normalizeAgentId(explicitAgentId)];
+  }
+  const ids = new Set<string>();
+  for (const agent of listAgentsForGateway(config).agents) {
+    ids.add(normalizeAgentId(agent.id));
+  }
+  return Array.from(ids).toSorted((a, b) => a.localeCompare(b));
+}
+
+function mergeCostUsageSummaries(params: {
+  startMs: number;
+  endMs: number;
+  summaries: CostUsageSummary[];
+}): CostUsageSummary {
+  const totals = emptyCostUsageTotals();
+  const dailyMap = new Map<string, CostUsageSummary["daily"][number]>();
+
+  for (const summary of params.summaries) {
+    addCostUsageTotals(totals, summary.totals);
+    for (const day of summary.daily ?? []) {
+      const daily =
+        dailyMap.get(day.date) ?? Object.assign({ date: day.date }, emptyCostUsageTotals());
+      addCostUsageTotals(daily, day);
+      dailyMap.set(day.date, daily);
+    }
+  }
+
+  return {
+    updatedAt: Date.now(),
+    days:
+      params.summaries[0]?.days ??
+      Math.max(1, Math.ceil((params.endMs - params.startMs + 1) / DAY_MS)),
+    daily: Array.from(dailyMap.values()).toSorted((a, b) => a.date.localeCompare(b.date)),
+    totals,
+  };
+}
+
+async function loadCostUsageSummaryForAgentScope(params: {
+  startMs: number;
+  endMs: number;
+  config: OpenClawConfig;
+  agentIds: readonly string[];
+}): Promise<CostUsageSummary> {
+  if (params.agentIds.length <= 1) {
+    return await loadCostUsageSummary({
+      startMs: params.startMs,
+      endMs: params.endMs,
+      config: params.config,
+      agentId: params.agentIds[0],
+    });
+  }
+
+  const summaries = await Promise.all(
+    params.agentIds.map((agentId) =>
+      loadCostUsageSummary({
+        startMs: params.startMs,
+        endMs: params.endMs,
+        config: params.config,
+        agentId,
+      }),
+    ),
+  );
+  return mergeCostUsageSummaries({
+    startMs: params.startMs,
+    endMs: params.endMs,
+    summaries,
+  });
+}
+
 async function loadCostUsageSummaryCached(params: {
   startMs: number;
   endMs: number;
   config: OpenClawConfig;
+  agentIds?: readonly string[];
 }): Promise<CostUsageSummary> {
-  const cacheKey = `${params.startMs}-${params.endMs}`;
+  const agentIds = params.agentIds
+    ? Array.from(new Set(params.agentIds.map((id) => normalizeAgentId(id)))).toSorted((a, b) =>
+        a.localeCompare(b),
+      )
+    : [];
+  const cacheScope = agentIds.length ? `agents:${agentIds.join(",")}` : "legacy";
+  const cacheKey = `${params.startMs}-${params.endMs}-${cacheScope}`;
   const now = Date.now();
   const cached = costUsageCache.get(cacheKey);
   if (cached?.summary && cached.updatedAt && now - cached.updatedAt < COST_USAGE_CACHE_TTL_MS) {
@@ -340,10 +453,11 @@ async function loadCostUsageSummaryCached(params: {
   }
 
   const entry: CostUsageCacheEntry = cached ?? {};
-  const inFlight = loadCostUsageSummary({
+  const inFlight = loadCostUsageSummaryForAgentScope({
     startMs: params.startMs,
     endMs: params.endMs,
     config: params.config,
+    agentIds,
   })
     .then((summary) => {
       setCostUsageCache(cacheKey, { summary, updatedAt: Date.now() });
@@ -382,6 +496,8 @@ export const __test = {
   parseDays,
   parseDateRange,
   discoverAllSessionsForUsage,
+  resolveCostUsageAgentIds,
+  mergeCostUsageSummaries,
   loadCostUsageSummaryCached,
   costUsageCache,
 };
@@ -402,7 +518,8 @@ export const usageHandlers: GatewayRequestHandlers = {
       mode: params?.mode,
       utcOffset: params?.utcOffset,
     });
-    const summary = await loadCostUsageSummaryCached({ startMs, endMs, config });
+    const agentIds = resolveCostUsageAgentIds(config, params?.agentId);
+    const summary = await loadCostUsageSummaryCached({ startMs, endMs, config, agentIds });
     respond(true, summary, undefined);
   },
   "sessions.usage": async ({ respond, params, context }) => {
