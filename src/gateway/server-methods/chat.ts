@@ -13,6 +13,7 @@ import { stageSandboxMedia } from "../../auto-reply/reply/stage-sandbox-media.js
 import type { MsgContext, TemplateContext } from "../../auto-reply/templating.js";
 import { extractCanvasFromText } from "../../chat/canvas-render.js";
 import { resolveSessionFilePath } from "../../config/sessions.js";
+import { filterDeliveryMirrorTranscriptArtifacts } from "../../config/sessions/transcript-artifacts.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { formatErrorMessage } from "../../infra/errors.js";
 import { jsonUtf8Bytes } from "../../infra/json-utf8-bytes.js";
@@ -1664,11 +1665,13 @@ export const chatHandlers: GatewayRequestHandlers = {
     const resolvedSessionModel = resolveSessionModelRef(cfg, entry, sessionAgentId);
     const localMessages =
       sessionId && storePath ? readSessionMessages(sessionId, storePath, entry?.sessionFile) : [];
-    const rawMessages = augmentChatHistoryWithCliSessionImports({
-      entry,
-      provider: resolvedSessionModel.provider,
-      localMessages,
-    });
+    const rawMessages = filterDeliveryMirrorTranscriptArtifacts(
+      augmentChatHistoryWithCliSessionImports({
+        entry,
+        provider: resolvedSessionModel.provider,
+        localMessages,
+      }),
+    );
     const hardMax = 1000;
     const defaultLimit = 200;
     const requested = typeof limit === "number" ? limit : defaultLimit;

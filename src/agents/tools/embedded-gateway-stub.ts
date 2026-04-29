@@ -14,6 +14,7 @@ interface EmbeddedGatewayRuntime {
     provider: string | undefined;
     localMessages: unknown[];
   }) => unknown[];
+  filterDeliveryMirrorTranscriptArtifacts: (messages: unknown[]) => unknown[];
   getMaxChatHistoryMessagesBytes: () => number;
   augmentChatHistoryWithCanvasBlocks: (msgs: unknown[]) => unknown[];
   CHAT_HISTORY_MAX_SINGLE_MESSAGE_BYTES: number;
@@ -114,11 +115,13 @@ async function handleChatHistory(params: Record<string, unknown>): Promise<{
       ? rt.readSessionMessages(sessionId, storePath, entry?.sessionFile as string | undefined)
       : [];
 
-  const rawMessages = rt.augmentChatHistoryWithCliSessionImports({
-    entry,
-    provider: resolvedSessionModel.provider,
-    localMessages,
-  });
+  const rawMessages = rt.filterDeliveryMirrorTranscriptArtifacts(
+    rt.augmentChatHistoryWithCliSessionImports({
+      entry,
+      provider: resolvedSessionModel.provider,
+      localMessages,
+    }),
+  );
 
   const hardMax = 1000;
   const defaultLimit = 200;

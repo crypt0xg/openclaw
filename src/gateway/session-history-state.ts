@@ -1,4 +1,8 @@
 import {
+  filterDeliveryMirrorTranscriptArtifacts,
+  isDeliveryMirrorTranscriptArtifact,
+} from "../config/sessions/transcript-artifacts.js";
+import {
   DEFAULT_CHAT_HISTORY_TEXT_MAX_CHARS,
   projectChatDisplayMessages,
 } from "./chat-display-projection.js";
@@ -99,8 +103,9 @@ export function buildSessionHistorySnapshot(params: {
   limit?: number;
   cursor?: string;
 }): SessionHistorySnapshot {
+  const visibleSourceMessages = filterDeliveryMirrorTranscriptArtifacts(params.rawMessages);
   const visibleMessages = toSessionHistoryMessages(
-    projectChatDisplayMessages(params.rawMessages, {
+    projectChatDisplayMessages(visibleSourceMessages, {
       maxChars: params.maxChars ?? DEFAULT_CHAT_HISTORY_TEXT_MAX_CHARS,
     }),
   );
@@ -174,6 +179,9 @@ export class SessionHistorySseState {
       ...(typeof update.messageId === "string" ? { id: update.messageId } : {}),
       seq: this.rawTranscriptSeq,
     });
+    if (isDeliveryMirrorTranscriptArtifact(nextMessage)) {
+      return null;
+    }
     const [sanitizedMessage] = toSessionHistoryMessages(
       projectChatDisplayMessages([nextMessage], { maxChars: this.maxChars }),
     );

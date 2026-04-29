@@ -775,6 +775,61 @@ describe("gateway server sessions", () => {
     ws.close();
   });
 
+  test("sessions.get filters delivery-mirror transcript artifacts from history", async () => {
+    const { dir, storePath } = await createSessionStoreDir();
+    const sessionId = "sess-delivery-mirror-history";
+    await fs.writeFile(
+      path.join(dir, `${sessionId}.jsonl`),
+      [
+        JSON.stringify({ type: "session", version: 1, id: sessionId }),
+        JSON.stringify({
+          message: {
+            role: "user",
+            content: [{ type: "text", text: "hello" }],
+          },
+        }),
+        JSON.stringify({
+          message: {
+            role: "assistant",
+            provider: "openclaw",
+            model: "delivery-mirror",
+            content: [{ type: "text", text: "mirrored delivery" }],
+          },
+        }),
+        JSON.stringify({
+          message: {
+            role: "assistant",
+            provider: "openai",
+            model: "gpt-5.4",
+            content: [{ type: "text", text: "real reply" }],
+          },
+        }),
+      ].join("\n"),
+      "utf-8",
+    );
+    await writeSessionStore({
+      entries: {
+        main: {
+          sessionId,
+          updatedAt: Date.now(),
+        },
+      },
+      storePath,
+    });
+
+    const res = await directSessionReq<{
+      messages?: Array<{ content?: string | Array<{ text?: string }> }>;
+    }>("sessions.get", { key: "main" });
+
+    expect(res.ok).toBe(true);
+    expect(
+      res.payload?.messages?.map((message) =>
+        Array.isArray(message.content) ? message.content[0]?.text : message.content,
+      ),
+    ).toEqual(["hello", "real reply"]);
+    expect(JSON.stringify(res.payload?.messages)).not.toContain("mirrored delivery");
+  });
+
   test("sessions.list uses the gateway model catalog for effective thinking defaults", async () => {
     await createSessionStoreDir();
     testState.agentConfig = {

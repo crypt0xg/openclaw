@@ -19,6 +19,7 @@ import {
   type SessionEntry,
   updateSessionStore,
 } from "../../config/sessions.js";
+import { filterDeliveryMirrorTranscriptArtifacts } from "../../config/sessions/transcript-artifacts.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import {
   hasInternalHookListeners,
@@ -1603,7 +1604,9 @@ export const sessionsHandlers: GatewayRequestHandlers = {
       respond(true, { messages: [] }, undefined);
       return;
     }
-    const allMessages = readSessionMessages(entry.sessionId, storePath, entry.sessionFile);
+    const allMessages = filterDeliveryMirrorTranscriptArtifacts(
+      readSessionMessages(entry.sessionId, storePath, entry.sessionFile),
+    );
     const messages = limit < allMessages.length ? allMessages.slice(-limit) : allMessages;
     respond(true, { messages }, undefined);
   },

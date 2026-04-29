@@ -6,6 +6,7 @@ import { buildAllowedModelSet, resolveThinkingDefault } from "../agents/model-se
 import { createDefaultDeps } from "../cli/deps.js";
 import { getRuntimeConfig } from "../config/config.js";
 import { updateSessionStore } from "../config/sessions.js";
+import { filterDeliveryMirrorTranscriptArtifacts } from "../config/sessions/transcript-artifacts.js";
 import {
   projectRecentChatDisplayMessages,
   resolveEffectiveChatHistoryMaxChars,
@@ -198,11 +199,13 @@ export class EmbeddedTuiBackend implements TuiBackend {
     const resolvedSessionModel = resolveSessionModelRef(cfg, entry, sessionAgentId);
     const localMessages =
       sessionId && storePath ? readSessionMessages(sessionId, storePath, entry?.sessionFile) : [];
-    const rawMessages = augmentChatHistoryWithCliSessionImports({
-      entry,
-      provider: resolvedSessionModel.provider,
-      localMessages,
-    });
+    const rawMessages = filterDeliveryMirrorTranscriptArtifacts(
+      augmentChatHistoryWithCliSessionImports({
+        entry,
+        provider: resolvedSessionModel.provider,
+        localMessages,
+      }),
+    );
     const max = Math.min(1000, typeof opts.limit === "number" ? opts.limit : 200);
     const effectiveMaxChars = resolveEffectiveChatHistoryMaxChars(cfg);
     const normalized = augmentChatHistoryWithCanvasBlocks(

@@ -77,6 +77,34 @@ describe("SessionHistorySseState", () => {
     expect(snapshot.rawTranscriptSeq).toBe(2);
   });
 
+  test("filters delivery-mirror audit entries from visible history while preserving raw seq", () => {
+    const snapshot = buildSessionHistorySnapshot({
+      rawMessages: [
+        {
+          role: "assistant",
+          content: [{ type: "text", text: "first visible" }],
+          __openclaw: { seq: 1 },
+        },
+        {
+          role: "assistant",
+          provider: "openclaw",
+          model: "delivery-mirror",
+          content: [{ type: "text", text: "mirrored delivery" }],
+          __openclaw: { seq: 2 },
+        },
+        {
+          role: "assistant",
+          content: [{ type: "text", text: "second visible" }],
+          __openclaw: { seq: 3 },
+        },
+      ],
+    });
+
+    expect(snapshot.history.messages.map((message) => message.__openclaw?.seq)).toEqual([1, 3]);
+    expect(JSON.stringify(snapshot.history.messages)).not.toContain("mirrored delivery");
+    expect(snapshot.rawTranscriptSeq).toBe(3);
+  });
+
   test("strips legacy internal envelopes before exposing history", () => {
     const snapshot = buildSessionHistorySnapshot({
       rawMessages: [
@@ -225,5 +253,39 @@ describe("SessionHistorySseState", () => {
       }),
     ).toBeNull();
     expect(state.snapshot().messages).toHaveLength(1);
+  });
+
+  test("does not append delivery-mirror SSE messages but keeps sequence accounting", () => {
+    const state = SessionHistorySseState.fromRawSnapshot({
+      target: { sessionId: "sess-main" },
+      rawMessages: [
+        {
+          role: "assistant",
+          content: [{ type: "text", text: "already visible" }],
+          __openclaw: { seq: 1 },
+        },
+      ],
+    });
+
+    expect(
+      state.appendInlineMessage({
+        message: {
+          role: "assistant",
+          provider: "openclaw",
+          model: "delivery-mirror",
+          content: [{ type: "text", text: "mirrored delivery" }],
+        },
+      }),
+    ).toBeNull();
+    const appended = state.appendInlineMessage({
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: "next visible" }],
+      },
+    });
+
+    expect(appended?.messageSeq).toBe(3);
+    expect(state.snapshot().messages.map((message) => message.__openclaw?.seq)).toEqual([1, 3]);
+    expect(JSON.stringify(state.snapshot().messages)).not.toContain("mirrored delivery");
   });
 });

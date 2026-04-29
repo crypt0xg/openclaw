@@ -18,6 +18,10 @@ import { evaluateSessionFreshness, resolveSessionResetPolicy } from "./reset.js"
 import { resolveAndPersistSessionFile } from "./session-file.js";
 import { clearSessionStoreCacheForTest, loadSessionStore, updateSessionStore } from "./store.js";
 import { useTempSessionsFixture } from "./test-helpers.js";
+import {
+  filterDeliveryMirrorTranscriptArtifacts,
+  isDeliveryMirrorTranscriptArtifact,
+} from "./transcript-artifacts.js";
 import { mergeSessionEntry, mergeSessionEntryWithPolicy, type SessionEntry } from "./types.js";
 
 describe("session path safety", () => {
@@ -100,6 +104,46 @@ describe("session path safety", () => {
       expect(fs.realpathSync(path.dirname(resolved))).toBe(fs.realpathSync(sessionsDir));
       expect(path.basename(resolved)).toBe("sess-1.jsonl");
     });
+  });
+});
+
+describe("delivery mirror transcript artifacts", () => {
+  it("matches only delivery-mirror assistant audit entries", () => {
+    const deliveryMirror = {
+      role: "assistant",
+      provider: " openclaw ",
+      model: " delivery-mirror ",
+      content: [{ type: "text", text: "mirrored" }],
+    };
+    const gatewayInjected = {
+      role: "assistant",
+      provider: "openclaw",
+      model: "gateway-injected",
+      content: [{ type: "text", text: "injected" }],
+    };
+    const normalAssistant = {
+      role: "assistant",
+      provider: "openai",
+      model: "gpt-5.4",
+      content: [{ type: "text", text: "visible" }],
+    };
+
+    expect(isDeliveryMirrorTranscriptArtifact(deliveryMirror)).toBe(true);
+    expect(isDeliveryMirrorTranscriptArtifact(gatewayInjected)).toBe(false);
+    expect(isDeliveryMirrorTranscriptArtifact(normalAssistant)).toBe(false);
+
+    expect(
+      filterDeliveryMirrorTranscriptArtifacts([deliveryMirror, gatewayInjected, normalAssistant]),
+    ).toEqual([gatewayInjected, normalAssistant]);
+  });
+
+  it("keeps the original array identity when no delivery mirror artifacts exist", () => {
+    const messages = [
+      { role: "user", content: "hello" },
+      { role: "assistant", provider: "openai", model: "gpt-5.4", content: "hi" },
+    ];
+
+    expect(filterDeliveryMirrorTranscriptArtifacts(messages)).toBe(messages);
   });
 });
 

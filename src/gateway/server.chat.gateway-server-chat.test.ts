@@ -547,6 +547,44 @@ describe("gateway server chat", () => {
     expect(textValues).toEqual(["hello", "real reply", "real text field reply", "NO_REPLY"]);
   });
 
+  test("chat.history hides delivery-mirror transcript artifacts", async () => {
+    const historyMessages = await loadChatHistoryWithMessages([
+      {
+        role: "user",
+        content: [{ type: "text", text: "hello" }],
+        timestamp: 1,
+      },
+      {
+        role: "assistant",
+        provider: "openclaw",
+        model: "delivery-mirror",
+        content: [{ type: "text", text: "mirrored delivery" }],
+        timestamp: 2,
+      },
+      {
+        role: "assistant",
+        provider: "openclaw",
+        model: "gateway-injected",
+        content: [{ type: "text", text: "injected note" }],
+        timestamp: 3,
+      },
+      {
+        role: "assistant",
+        provider: "openai",
+        model: "gpt-5.4",
+        content: [{ type: "text", text: "real reply" }],
+        timestamp: 4,
+      },
+    ]);
+
+    expect(collectHistoryTextValues(historyMessages)).toEqual([
+      "hello",
+      "injected note",
+      "real reply",
+    ]);
+    expect(JSON.stringify(historyMessages)).not.toContain("mirrored delivery");
+  });
+
   test("chat.history hides commentary-only assistant entries", async () => {
     const historyMessages = await loadChatHistoryWithMessages([
       {

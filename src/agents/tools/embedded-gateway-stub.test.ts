@@ -15,6 +15,7 @@ const runtime = vi.hoisted(() => ({
   augmentChatHistoryWithCliSessionImports: vi.fn(
     ({ localMessages }: { localMessages?: unknown[] }) => localMessages ?? [],
   ),
+  filterDeliveryMirrorTranscriptArtifacts: vi.fn((messages: unknown[]): unknown[] => messages),
   resolveEffectiveChatHistoryMaxChars: vi.fn(() => 100_000),
   projectRecentChatDisplayMessages: vi.fn((messages: unknown[]): unknown[] => messages),
   augmentChatHistoryWithCanvasBlocks: vi.fn((messages: unknown[]) => messages),
@@ -34,6 +35,7 @@ describe("embedded gateway stub", () => {
     runtime.getRuntimeConfig.mockClear();
     runtime.resolveSessionKeyFromResolveParams.mockReset();
     runtime.projectRecentChatDisplayMessages.mockClear();
+    runtime.filterDeliveryMirrorTranscriptArtifacts.mockClear();
     runtime.readSessionMessages.mockClear();
   });
 
@@ -91,6 +93,7 @@ describe("embedded gateway stub", () => {
       maxChars: 100_000,
       maxMessages: 200,
     });
+    expect(runtime.filterDeliveryMirrorTranscriptArtifacts).toHaveBeenCalledWith(rawMessages);
     expect(result.messages).toEqual(projectedMessages);
   });
 

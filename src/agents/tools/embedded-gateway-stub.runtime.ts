@@ -1,5 +1,6 @@
 export { resolveSessionAgentId } from "../../agents/agent-scope.js";
 export { getRuntimeConfig } from "../../config/config.js";
+export { filterDeliveryMirrorTranscriptArtifacts } from "../../config/sessions/transcript-artifacts.js";
 export {
   projectRecentChatDisplayMessages,
   resolveEffectiveChatHistoryMaxChars,

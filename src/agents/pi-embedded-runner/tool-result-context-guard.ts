@@ -1,4 +1,5 @@
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import { filterDeliveryMirrorTranscriptArtifacts } from "../../config/sessions/transcript-artifacts.js";
 import type { ContextEngine, ContextEngineRuntimeContext } from "../../context-engine/types.js";
 import {
   CHARS_PER_TOKEN_ESTIMATE,
@@ -213,7 +214,9 @@ export function installContextEngineLoopHook(params: {
     const transformed = originalTransformContext
       ? await originalTransformContext.call(mutableAgent, messages, signal)
       : messages;
-    const sourceMessages = Array.isArray(transformed) ? transformed : messages;
+    const sourceMessages = filterDeliveryMirrorTranscriptArtifacts(
+      Array.isArray(transformed) ? transformed : messages,
+    );
 
     // Seed the loop fence from the attempt's pre-prompt message count when available.
     // This keeps the first real post-tool-call iteration eligible for compaction even
@@ -318,7 +321,9 @@ export function installToolResultContextGuard(params: {
       ? await originalTransformContext.call(mutableAgent, messages, signal)
       : messages;
 
-    const sourceMessages = Array.isArray(transformed) ? transformed : messages;
+    const sourceMessages = filterDeliveryMirrorTranscriptArtifacts(
+      Array.isArray(transformed) ? transformed : messages,
+    );
     const contextMessages = toolResultsNeedTruncation({
       messages: sourceMessages,
       maxSingleToolResultChars,

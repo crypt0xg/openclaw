@@ -128,6 +128,51 @@ describe("installToolResultContextGuard", () => {
     expect(transformed).toBe(contextForNextCall);
   });
 
+  it("filters delivery-mirror transcript artifacts before LLM context accounting", async () => {
+    const agent = makeGuardableAgent();
+    const contextForNextCall = [
+      makeUser("hello"),
+      makeAssistant("mirrored delivery", {
+        provider: "openclaw",
+        model: "delivery-mirror",
+      }),
+      makeAssistant("injected note", {
+        provider: "openclaw",
+        model: "gateway-injected",
+      }),
+      makeToolResult("call_ok", "small output"),
+    ];
+
+    const transformed = (await applyGuardToContext(agent, contextForNextCall)) as AgentMessage[];
+
+    expect(transformed).toEqual([
+      contextForNextCall[0],
+      contextForNextCall[2],
+      contextForNextCall[3],
+    ]);
+    expect(contextForNextCall).toHaveLength(4);
+  });
+
+  it("does not let large delivery-mirror audit entries trigger preemptive overflow", async () => {
+    const agent = makeGuardableAgent();
+    const contextForNextCall = [
+      makeUser("hello"),
+      makeAssistant("m".repeat(20_000), {
+        provider: "openclaw",
+        model: "delivery-mirror",
+      }),
+    ];
+
+    const transformed = (await applyGuardToContext(
+      agent,
+      contextForNextCall,
+      10,
+    )) as AgentMessage[];
+
+    expect(transformed).toEqual([contextForNextCall[0]]);
+    expect((contextForNextCall[1] as { content?: unknown }).content).toBe("m".repeat(20_000));
+  });
+
   it("does not preemptively overflow large non-tool context that is still under the high-water mark", async () => {
     const agent = makeGuardableAgent();
     const contextForNextCall = [makeUser("u".repeat(3_200))];
