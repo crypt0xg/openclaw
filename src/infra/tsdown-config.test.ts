@@ -85,6 +85,28 @@ describe("tsdown config", () => {
     );
   });
 
+  it("keeps gateway lifecycle lazy boundaries on stable dist entry filenames", () => {
+    const distGraph = unifiedDistGraph();
+
+    expect(distGraph).toBeDefined();
+    expect(entryKeys(distGraph as TsdownConfigEntry)).toEqual(
+      expect.arrayContaining([
+        "agents/pi-embedded-runner/runs",
+        "gateway/mcp-http",
+        "gateway/server-close",
+        "infra/heartbeat-runner.runtime",
+        "infra/process-respawn",
+        "infra/restart",
+        "infra/restart-sentinel",
+        "infra/supervisor-markers",
+        "logging/diagnostic-stability-bundle",
+        "plugins/bundled-runtime-deps-activity",
+        "process/command-queue",
+        "tasks/runtime-internal",
+      ]),
+    );
+  });
+
   it("emits staged bundled plugins as separate extension graphs", () => {
     const stagedGraphs = asConfigArray(tsdownConfig).filter(
       (config) => typeof config.outDir === "string" && config.outDir.startsWith("dist/extensions/"),

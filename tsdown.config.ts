@@ -201,6 +201,26 @@ function buildBundledPluginNeverBundlePredicate(packageJson: {
   };
 }
 
+function buildGatewayLifecycleLazyEntries(): Record<string, string> {
+  return {
+    // These first-hop lazy imports can fire long after startup from an already-
+    // running gateway process. Keep their entry filenames stable so a rebuild
+    // does not strand lifecycle control paths on deleted hashed chunks.
+    "agents/pi-embedded-runner/runs": "src/agents/pi-embedded-runner/runs.ts",
+    "gateway/mcp-http": "src/gateway/mcp-http.ts",
+    "gateway/server-close": "src/gateway/server-close.ts",
+    "infra/heartbeat-runner.runtime": "src/infra/heartbeat-runner.runtime.ts",
+    "infra/process-respawn": "src/infra/process-respawn.ts",
+    "infra/restart": "src/infra/restart.ts",
+    "infra/restart-sentinel": "src/infra/restart-sentinel.ts",
+    "infra/supervisor-markers": "src/infra/supervisor-markers.ts",
+    "logging/diagnostic-stability-bundle": "src/logging/diagnostic-stability-bundle.ts",
+    "plugins/bundled-runtime-deps-activity": "src/plugins/bundled-runtime-deps-activity.ts",
+    "process/command-queue": "src/process/command-queue.ts",
+    "tasks/runtime-internal": "src/tasks/runtime-internal.ts",
+  };
+}
+
 function buildCoreDistEntries(): Record<string, string> {
   return {
     index: "src/index.ts",
@@ -212,6 +232,7 @@ function buildCoreDistEntries(): Record<string, string> {
     "agents/auth-profiles.runtime": "src/agents/auth-profiles.runtime.ts",
     "agents/model-catalog.runtime": "src/agents/model-catalog.runtime.ts",
     "agents/models-config.runtime": "src/agents/models-config.runtime.ts",
+    ...buildGatewayLifecycleLazyEntries(),
     "plugins/memory-state": "src/plugins/memory-state.ts",
     "subagent-registry.runtime": "src/agents/subagent-registry.runtime.ts",
     "task-registry-control.runtime": "src/tasks/task-registry-control.runtime.ts",
