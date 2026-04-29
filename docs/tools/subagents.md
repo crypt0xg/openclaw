@@ -91,7 +91,7 @@ requester chat when the run finishes.
     - `Result` — latest visible `assistant` reply text, otherwise sanitized latest tool/toolResult text. Terminal failed runs do not reuse captured reply text.
     - `Status` — `completed successfully` / `failed` / `timed out` / `unknown`.
     - Compact runtime/token stats.
-    - A delivery instruction telling the requester agent to rewrite in normal assistant voice (not forward raw internal metadata).
+    - A delivery instruction telling the requester agent to treat the result as review material, rewrite in normal assistant voice (not forward raw internal metadata), and verify the external final state before saying work is done, ready, or complete.
 
   </Accordion>
   <Accordion title="Modes and ACP runtime">
