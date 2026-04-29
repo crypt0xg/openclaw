@@ -35,6 +35,48 @@ function createApprovalChannelPlugin(params: {
   };
 }
 
+function createOwnerDerivedApprovalChannelPlugin(params: {
+  id: "telegram";
+  ownerPrefixes: string[];
+}): ChannelPlugin {
+  const resolveOwnerTargets = (cfg: OpenClawConfig) =>
+    (cfg.commands?.ownerAllowFrom ?? [])
+      .map((owner) => String(owner))
+      .flatMap((owner) => {
+        const trimmed = owner.trim();
+        const prefix = params.ownerPrefixes.find((candidate) =>
+          trimmed.toLowerCase().startsWith(`${candidate}:`),
+        );
+        if (prefix) {
+          const value = trimmed.slice(prefix.length + 1).trim();
+          return value ? [value] : [];
+        }
+        return /^\d+$/.test(trimmed) ? [trimmed] : [];
+      })
+      .map((to) => ({ to }));
+
+  return {
+    ...createChannelTestPluginBase({
+      id: params.id,
+      label: params.id,
+    }),
+    approvalCapability: {
+      native: {
+        describeDeliveryCapabilities: vi.fn(({ cfg }) => {
+          const targets = resolveOwnerTargets(cfg);
+          return {
+            enabled: targets.length > 0,
+            preferredSurface: "approver-dm" as const,
+            supportsOriginSurface: false,
+            supportsApproverDmSurface: true,
+          };
+        }),
+        resolveApproverDmTargets: vi.fn(({ cfg }) => resolveOwnerTargets(cfg)),
+      },
+    },
+  };
+}
+
 function registerApprovalChannelPlugins(plugins: ChannelPlugin[]) {
   setActivePluginRegistry(
     createTestRegistry(
@@ -193,6 +235,42 @@ describe("resolvePrivateCommandRouteTargets", () => {
       commandParams: buildCommandParams({
         commands: {
           ownerAllowFrom: ["telegram:849985193"],
+        },
+      } as OpenClawConfig),
+      request: buildApprovalRequest(),
+    });
+
+    expect(targets).toEqual([
+      {
+        channel: "telegram",
+        to: "849985193",
+        accountId: undefined,
+        threadId: undefined,
+      },
+    ]);
+  });
+
+  it("routes a Discord group command to the Telegram owner without Telegram exec approvers", async () => {
+    registerApprovalChannelPlugins([
+      createApprovalChannelPlugin({
+        id: "discord",
+        targets: [],
+      }),
+      createOwnerDerivedApprovalChannelPlugin({
+        id: "telegram",
+        ownerPrefixes: ["telegram", "tg"],
+      }),
+    ]);
+
+    const targets = await resolvePrivateCommandRouteTargets({
+      commandParams: buildCommandParams({
+        commands: {
+          ownerAllowFrom: ["telegram:849985193"],
+        },
+        channels: {
+          telegram: {
+            botToken: "test-token",
+          },
         },
       } as OpenClawConfig),
       request: buildApprovalRequest(),
