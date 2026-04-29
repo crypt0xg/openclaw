@@ -558,12 +558,11 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
       return [];
     }
 
-    const resultSets: KeywordSearchHit[][] = [];
-    for (const term of fallbackTerms) {
-      resultSets.push(
-        await this.searchKeyword(term, limit, options, sourceFilterList).catch(() => []),
-      );
-    }
+    const resultSets = await Promise.all(
+      fallbackTerms.map((term) =>
+        this.searchKeyword(term, limit, options, sourceFilterList).catch(() => []),
+      ),
+    );
     return this.mergeKeywordSearchHits(resultSets);
   }
 
