@@ -53,7 +53,8 @@ type LogsCliOptions = {
   expectFinal?: boolean;
 };
 
-const LOCAL_FALLBACK_NOTICE = "Local Gateway RPC unavailable; reading configured file log instead.";
+export const LOCAL_FALLBACK_NOTICE =
+  "Local Gateway RPC unavailable; reading configured file log instead.";
 
 function parsePositiveInt(value: string | undefined, fallback: number): number {
   if (!value) {

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { GatewayTransportError } from "../gateway/call.js";
 import { runRegisteredCli } from "../test-utils/command-runner.js";
-import { formatLogTimestamp, registerLogsCli } from "./logs-cli.js";
+import { LOCAL_FALLBACK_NOTICE, formatLogTimestamp, registerLogsCli } from "./logs-cli.js";
 
 const { MockGatewayTransportError } = vi.hoisted(() => ({
   MockGatewayTransportError: class extends Error {
@@ -191,7 +191,7 @@ describe("logs cli", () => {
       maxBytes: 250_000,
     });
     expect(stdoutWrites.join("")).toContain("local fallback line");
-    expect(stderrWrites.join("")).toContain("Local Gateway RPC unavailable");
+    expect(stderrWrites.join("")).toContain(LOCAL_FALLBACK_NOTICE);
   });
 
   it("falls back to the local log file on loopback scope-upgrade errors", async () => {
@@ -214,7 +214,7 @@ describe("logs cli", () => {
 
     expect(readConfiguredLogTail).toHaveBeenCalledTimes(1);
     expect(stdoutWrites.join("")).toContain("local fallback line");
-    expect(stderrWrites.join("")).toContain("Local Gateway RPC unavailable");
+    expect(stderrWrites.join("")).toContain(LOCAL_FALLBACK_NOTICE);
   });
 
   it("falls back to the configured Gateway file log on loopback gateway close errors", async () => {
@@ -247,7 +247,7 @@ describe("logs cli", () => {
 
     expect(readConfiguredLogTail).toHaveBeenCalledTimes(1);
     expect(stdoutWrites.join("")).toContain("local fallback line");
-    expect(stderrWrites.join("")).toContain("Local Gateway RPC unavailable");
+    expect(stderrWrites.join("")).toContain(LOCAL_FALLBACK_NOTICE);
   });
 
   it("falls back to the configured Gateway file log on post-handshake plain close errors", async () => {
@@ -268,7 +268,7 @@ describe("logs cli", () => {
 
     expect(readConfiguredLogTail).toHaveBeenCalledTimes(1);
     expect(stdoutWrites.join("")).toContain("local fallback line");
-    expect(stderrWrites.join("")).toContain("Local Gateway RPC unavailable");
+    expect(stderrWrites.join("")).toContain(LOCAL_FALLBACK_NOTICE);
   });
 
   it("does not use local fallback for explicit Gateway URLs", async () => {
