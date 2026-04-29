@@ -218,7 +218,9 @@ from each attempt.
   <Accordion title="Timeouts">
     Set `agents.defaults.imageGenerationModel.timeoutMs` for slow image
     backends. A per-call `timeoutMs` tool parameter overrides the configured
-    default.
+    default. When the Codex app-server bridge runs `image_generate`, it uses
+    those tool-level deadlines instead of the shorter generic dynamic-tool
+    fallback, while still applying a bounded maximum.
   </Accordion>
   <Accordion title="Inspect at runtime">
     Use `action: "list"` to inspect the currently registered providers,

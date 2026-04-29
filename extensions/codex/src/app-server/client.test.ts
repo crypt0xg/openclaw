@@ -340,7 +340,7 @@ describe("CodexAppServerClient", () => {
     });
 
     harness.send({ id: "srv-timeout", method: "item/tool/call", params: { tool: "message" } });
-    await vi.advanceTimersByTimeAsync(__testing.CODEX_DYNAMIC_TOOL_SERVER_REQUEST_TIMEOUT_MS);
+    await vi.advanceTimersByTimeAsync(__testing.CODEX_DYNAMIC_TOOL_SERVER_REQUEST_MAX_TIMEOUT_MS);
     await vi.waitFor(() => expect(harness.writes.length).toBe(1));
 
     expect(JSON.parse(harness.writes[0] ?? "{}")).toEqual({
@@ -350,7 +350,7 @@ describe("CodexAppServerClient", () => {
         contentItems: [
           {
             type: "inputText",
-            text: `OpenClaw dynamic tool call timed out after ${__testing.CODEX_DYNAMIC_TOOL_SERVER_REQUEST_TIMEOUT_MS}ms before sending a response to Codex.`,
+            text: `OpenClaw dynamic tool call timed out after ${__testing.CODEX_DYNAMIC_TOOL_SERVER_REQUEST_MAX_TIMEOUT_MS}ms before sending a response to Codex.`,
           },
         ],
       },
@@ -360,7 +360,7 @@ describe("CodexAppServerClient", () => {
       expect.objectContaining({
         id: "srv-timeout",
         method: "item/tool/call",
-        timeoutMs: __testing.CODEX_DYNAMIC_TOOL_SERVER_REQUEST_TIMEOUT_MS,
+        timeoutMs: __testing.CODEX_DYNAMIC_TOOL_SERVER_REQUEST_MAX_TIMEOUT_MS,
       }),
     );
   });

@@ -82,6 +82,85 @@ afterEach(() => {
 });
 
 describe("createCodexDynamicToolBridge", () => {
+  it("resolves per-call timeoutMs values from dynamic tool arguments", () => {
+    const bridge = createCodexDynamicToolBridge({
+      tools: [
+        createTool({
+          name: "image_generate",
+          parameters: {
+            type: "object",
+            properties: {
+              timeoutMs: { type: "number" },
+            },
+          },
+        }),
+      ],
+      signal: new AbortController().signal,
+    });
+
+    expect(
+      bridge.resolveToolTimeoutMs({
+        threadId: "thread-1",
+        turnId: "turn-1",
+        callId: "call-1",
+        namespace: null,
+        tool: "image_generate",
+        arguments: { prompt: "hello", timeoutMs: 180_000 },
+      }),
+    ).toBe(180_000);
+  });
+
+  it("resolves default timeoutMs values from dynamic tool schemas", () => {
+    const bridge = createCodexDynamicToolBridge({
+      tools: [
+        createTool({
+          name: "slow_tool",
+          parameters: {
+            type: "object",
+            properties: {
+              timeoutMs: { type: "number", default: 120_000 },
+            },
+          },
+        }),
+      ],
+      signal: new AbortController().signal,
+    });
+
+    expect(
+      bridge.resolveToolTimeoutMs({
+        threadId: "thread-1",
+        turnId: "turn-1",
+        callId: "call-1",
+        namespace: null,
+        tool: "slow_tool",
+        arguments: {},
+      }),
+    ).toBe(120_000);
+  });
+
+  it("resolves configured timeoutMs values from dynamic tool metadata", () => {
+    const bridge = createCodexDynamicToolBridge({
+      tools: [
+        createTool({
+          name: "image_generate",
+          timeoutMs: 180_000,
+        }),
+      ],
+      signal: new AbortController().signal,
+    });
+
+    expect(
+      bridge.resolveToolTimeoutMs({
+        threadId: "thread-1",
+        turnId: "turn-1",
+        callId: "call-1",
+        namespace: null,
+        tool: "image_generate",
+        arguments: { prompt: "hello" },
+      }),
+    ).toBe(180_000);
+  });
+
   it.each([
     { toolName: "tts", mediaUrl: "/tmp/reply.opus", audioAsVoice: true },
     { toolName: "image_generate", mediaUrl: "/tmp/generated.png" },

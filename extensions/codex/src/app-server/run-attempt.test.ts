@@ -370,6 +370,72 @@ describe("runCodexAppServerAttempt", () => {
     expect(onTimeout).toHaveBeenCalledTimes(1);
   });
 
+  it("honors dynamic tool deadlines above the fallback timeout", async () => {
+    vi.useFakeTimers();
+    let settled = false;
+    const response = __testing
+      .handleDynamicToolCallWithTimeout({
+        call: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          callId: "call-long-timeout",
+          namespace: null,
+          tool: "image_generate",
+          arguments: { prompt: "hello", timeoutMs: 45_000 },
+        },
+        toolBridge: {
+          handleToolCall: vi.fn(() => new Promise<never>(() => undefined)),
+        },
+        signal: new AbortController().signal,
+        timeoutMs: 45_000,
+      })
+      .then((result) => {
+        settled = true;
+        return result;
+      });
+
+    await vi.advanceTimersByTimeAsync(__testing.CODEX_DYNAMIC_TOOL_FALLBACK_TIMEOUT_MS);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(15_000);
+
+    await expect(response).resolves.toEqual({
+      success: false,
+      contentItems: [
+        { type: "inputText", text: "OpenClaw dynamic tool call timed out after 45000ms." },
+      ],
+    });
+  });
+
+  it("caps dynamic tool deadlines at the bridge maximum", async () => {
+    expect(
+      __testing.normalizeCodexDynamicToolTimeoutMs(__testing.CODEX_DYNAMIC_TOOL_MAX_TIMEOUT_MS + 1),
+    ).toBe(__testing.CODEX_DYNAMIC_TOOL_MAX_TIMEOUT_MS);
+  });
+
+  it("resolves dynamic tool deadlines from tool call contracts", () => {
+    const call = {
+      threadId: "thread-1",
+      turnId: "turn-1",
+      callId: "call-image-timeout",
+      namespace: null,
+      tool: "image_generate",
+      arguments: { prompt: "hello", timeoutMs: 180_000 },
+    };
+
+    expect(
+      __testing.resolveCodexDynamicToolCallTimeoutMs({
+        call,
+        toolBridge: { resolveToolTimeoutMs: () => 180_000 },
+      }),
+    ).toBe(180_000);
+    expect(
+      __testing.resolveCodexDynamicToolCallTimeoutMs({
+        call,
+        toolBridge: { resolveToolTimeoutMs: () => undefined },
+      }),
+    ).toBe(__testing.CODEX_DYNAMIC_TOOL_FALLBACK_TIMEOUT_MS);
+  });
+
   it("releases the session when Codex never completes after a dynamic tool response", async () => {
     let handleRequest:
       | ((request: { id: string; method: string; params?: unknown }) => Promise<unknown>)

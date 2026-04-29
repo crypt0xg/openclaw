@@ -25,7 +25,8 @@ import { MIN_CODEX_APP_SERVER_VERSION } from "./version.js";
 
 export { MIN_CODEX_APP_SERVER_VERSION } from "./version.js";
 const CODEX_APP_SERVER_PARSE_LOG_MAX = 500;
-const CODEX_DYNAMIC_TOOL_SERVER_REQUEST_TIMEOUT_MS = 30_000;
+const CODEX_DYNAMIC_TOOL_SERVER_REQUEST_FALLBACK_TIMEOUT_MS = 30_000;
+const CODEX_DYNAMIC_TOOL_SERVER_REQUEST_MAX_TIMEOUT_MS = 10 * 60_000;
 
 type PendingRequest = {
   method: string;
@@ -351,10 +352,10 @@ export class CodexAppServerClient {
             embeddedAgentLog.warn("codex app-server server request timed out", {
               id: request.id,
               method: request.method,
-              timeoutMs: CODEX_DYNAMIC_TOOL_SERVER_REQUEST_TIMEOUT_MS,
+              timeoutMs: CODEX_DYNAMIC_TOOL_SERVER_REQUEST_MAX_TIMEOUT_MS,
             });
             resolve(timeoutResponse);
-          }, CODEX_DYNAMIC_TOOL_SERVER_REQUEST_TIMEOUT_MS);
+          }, CODEX_DYNAMIC_TOOL_SERVER_REQUEST_MAX_TIMEOUT_MS);
           timeout.unref?.();
         }),
       ]);
@@ -465,7 +466,7 @@ function timeoutServerRequestResponse(
     contentItems: [
       {
         type: "inputText",
-        text: `OpenClaw dynamic tool call timed out after ${CODEX_DYNAMIC_TOOL_SERVER_REQUEST_TIMEOUT_MS}ms before sending a response to Codex.`,
+        text: `OpenClaw dynamic tool call timed out after ${CODEX_DYNAMIC_TOOL_SERVER_REQUEST_MAX_TIMEOUT_MS}ms before sending a response to Codex.`,
       },
     ],
     success: false,
@@ -570,6 +571,7 @@ function formatExitValue(value: unknown): string {
 export const __testing = {
   closeCodexAppServerTransport,
   closeCodexAppServerTransportAndWait,
-  CODEX_DYNAMIC_TOOL_SERVER_REQUEST_TIMEOUT_MS,
+  CODEX_DYNAMIC_TOOL_SERVER_REQUEST_FALLBACK_TIMEOUT_MS,
+  CODEX_DYNAMIC_TOOL_SERVER_REQUEST_MAX_TIMEOUT_MS,
   redactCodexAppServerLinePreview,
 } as const;

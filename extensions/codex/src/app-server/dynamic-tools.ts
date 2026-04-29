@@ -23,6 +23,7 @@ import {
 
 export type CodexDynamicToolBridge = {
   specs: CodexDynamicToolSpec[];
+  resolveToolTimeoutMs: (params: CodexDynamicToolCallParams) => number | undefined;
   handleToolCall: (
     params: CodexDynamicToolCallParams,
     options?: { signal?: AbortSignal },
@@ -77,6 +78,17 @@ export function createCodexDynamicToolBridge(params: {
       inputSchema: toJsonValue(tool.parameters),
     })),
     telemetry,
+    resolveToolTimeoutMs: (call) => {
+      const tool = toolMap.get(call.tool);
+      if (!tool) {
+        return undefined;
+      }
+      return resolveDynamicToolTimeoutMs({
+        args: jsonObjectToRecord(call.arguments),
+        inputSchema: toJsonValue(tool.parameters),
+        toolTimeoutMs: tool.timeoutMs,
+      });
+    },
     handleToolCall: async (call, options) => {
       const tool = toolMap.get(call.tool);
       if (!tool) {
@@ -233,6 +245,55 @@ function collectToolTelemetry(params: {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function readPositiveFiniteNumber(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value.trim());
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return undefined;
+}
+
+function readSchemaDefault(schema: JsonValue, propertyName: string): unknown {
+  if (!isRecord(schema)) {
+    return undefined;
+  }
+  const properties = schema.properties;
+  if (!isRecord(properties)) {
+    return undefined;
+  }
+  const property = properties[propertyName];
+  if (!isRecord(property)) {
+    return undefined;
+  }
+  return property.default;
+}
+
+function resolveDynamicToolTimeoutMs(params: {
+  args: Record<string, unknown>;
+  inputSchema: JsonValue;
+  toolTimeoutMs?: number;
+}): number | undefined {
+  const timeoutMs =
+    readPositiveFiniteNumber(params.args.timeoutMs) ??
+    readPositiveFiniteNumber(params.toolTimeoutMs) ??
+    readPositiveFiniteNumber(readSchemaDefault(params.inputSchema, "timeoutMs"));
+  if (timeoutMs !== undefined) {
+    return timeoutMs;
+  }
+  const timeoutSeconds =
+    readPositiveFiniteNumber(params.args.timeoutSeconds) ??
+    readPositiveFiniteNumber(readSchemaDefault(params.inputSchema, "timeoutSeconds"));
+  if (timeoutSeconds !== undefined) {
+    return timeoutSeconds * 1000;
+  }
+  return undefined;
 }
 
 function isToolResultError(result: AgentToolResult<unknown>): boolean {

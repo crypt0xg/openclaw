@@ -16,6 +16,7 @@ export type AgentToolWithMeta<TParameters extends TSchema, TResult> = AgentTool<
 > & {
   ownerOnly?: boolean;
   displaySummary?: string;
+  timeoutMs?: number;
 };
 
 type ErasedAgentToolExecute = {
@@ -32,6 +33,7 @@ export type AnyAgentTool = Omit<AgentTool<TSchema, unknown>, "execute"> &
   ErasedAgentToolExecute & {
     ownerOnly?: boolean;
     displaySummary?: string;
+    timeoutMs?: number;
   };
 
 export function asToolParamsRecord(params: unknown): Record<string, unknown> {
