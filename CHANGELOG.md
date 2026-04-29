@@ -23,6 +23,7 @@ Docs: https://docs.openclaw.ai
 
 ### Fixes
 
+- Auto-reply: use the target agent auth store when `/models` filters provider visibility, so worker-agent auth profiles keep their providers visible in chat. Refs #74423; carries forward #74525. Thanks @clawsweeper.
 - Auto-reply: honor explicit `silentReply.direct: "allow"` for clean empty or reasoning-only direct chat turns while keeping the default direct-chat empty-response guard conservative. Fixes #74409. Thanks @jesuskannolis.
 - Ollama: normalize provider-prefixed tool-call names at the native stream boundary so Kimi/Ollama calls such as `functions.exec` dispatch as `exec` instead of missing configured tools. Fixes #74487. Thanks @afurm and @carreipeia.
 - Security/audit: resolve configured model aliases before model-tier and small-parameter checks, so alias-based GPT-5/Codex configs no longer report false weak-model warnings. Fixes #74455. Thanks @blaspat.
