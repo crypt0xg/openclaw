@@ -13,6 +13,7 @@ Docs: https://docs.openclaw.ai
 
 ### Fixes
 
+- Channels/iMessage: strip only known leading attributedBody corruption markers from echo-cache text keys so reflected outbound replies are still deduped without dropping interior replacement or control characters. Fixes #41330; refs #59973; carries forward #62191. Thanks @maguilar631697.
 - Gateway/shutdown: report structured shutdown warnings and HTTP close timeout warnings through `ShutdownResult` while preserving lifecycle hook hardening. Carries forward #41296. Thanks @edenfunf.
 - Plugins/QA: prebuild the private QA channel runtime before plugin gauntlet source runs so wrapper CPU/RSS measurements are not polluted by private QA dist rebuild work. Thanks @vincentkoc.
 - Gateway/reload: bound default restart deferral and SIGUSR1 restart drain to five minutes while preserving explicit `deferralTimeoutMs: 0` indefinite waits, so stale active work accounting cannot block config reloads forever. Thanks @vincentkoc.

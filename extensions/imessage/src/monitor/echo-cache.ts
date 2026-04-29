@@ -23,11 +23,30 @@ export type SentMessageCache = {
 const SENT_MESSAGE_TEXT_TTL_MS = 4_000;
 const SENT_MESSAGE_ID_TTL_MS = 60_000;
 
+function isLeadingIMessageEchoCorruptionCode(code: number): boolean {
+  return (
+    code <= 0x1f ||
+    code === 0x7f ||
+    (code >= 0x80 && code <= 0x9f) ||
+    code === 0xfffd ||
+    code === 0xfffe ||
+    code === 0xffff
+  );
+}
+
+function stripLeadingIMessageEchoCorruption(text: string): string {
+  let index = 0;
+  while (index < text.length && isLeadingIMessageEchoCorruptionCode(text.charCodeAt(index))) {
+    index += 1;
+  }
+  return index === 0 ? text : text.slice(index);
+}
+
 function normalizeEchoTextKey(text: string | undefined): string | null {
   if (!text) {
     return null;
   }
-  const normalized = text.replace(/\r\n?/g, "\n").trim();
+  const normalized = stripLeadingIMessageEchoCorruption(text.replace(/\r\n?/g, "\n")).trim();
   return normalized ? normalized : null;
 }
 
