@@ -1194,6 +1194,7 @@ export async function runEmbeddedPiAgent(
                     senderId: params.senderId,
                     provider,
                     modelId,
+                    modelFallbacksOverride: params.modelFallbacksOverride,
                     thinkLevel,
                     reasoningLevel: params.reasoningLevel,
                     bashElevated: params.bashElevated,
