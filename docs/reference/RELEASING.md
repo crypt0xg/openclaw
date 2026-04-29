@@ -140,7 +140,7 @@ the maintainer-only release runbook.
 - Run `pnpm release:check` before every tagged release
 - Release checks now run in a separate manual workflow:
   `OpenClaw Release Checks`
-- `OpenClaw Release Checks` also runs the QA Lab mock parity gate plus the fast
+- `OpenClaw Release Checks` also runs the QA Lab mock parity lane plus the fast
   live Matrix profile and Telegram QA lane before release approval. The live
   lanes use the `qa-live-shared` environment; Telegram also uses Convex CI
   credential leases. Run the manual `QA-Lab - All Lanes` workflow with
@@ -352,9 +352,6 @@ Docker environments instead of only source-level tests.
 Release Docker coverage includes:
 
 - full install smoke with the slow Bun global install smoke enabled
-- root Dockerfile smoke image preparation/reuse by target SHA, with QR,
-  root/gateway, and installer/Bun smoke jobs running as separate install-smoke
-  shards
 - repository E2E lanes
 - release-path Docker chunks: `core`, `package-update-openai`,
   `package-update-anthropic`, `package-update-core`, `plugins-runtime-plugins`,
@@ -391,7 +388,7 @@ package mechanics.
 
 Release QA Lab coverage includes:
 
-- mock parity gate comparing the OpenAI candidate lane against the Opus 4.6
+- mock parity lane comparing the OpenAI candidate lane against the Opus 4.6
   baseline using the agentic parity pack
 - fast live Matrix QA profile using the `qa-live-shared` environment
 - live Telegram QA lane using Convex CI credential leases
