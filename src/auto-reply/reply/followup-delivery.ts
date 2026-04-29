@@ -62,17 +62,10 @@ export function resolveFollowupDeliveryPayloads(params: {
     replyToMode,
     replyToChannel,
   });
-  const dedupedPayloads = filterMessagingToolDuplicates({
-    payloads: replyTaggedPayloads,
-    sentTexts: params.sentTexts ?? [],
-  });
-  const mediaFilteredPayloads = filterMessagingToolMediaDuplicates({
-    payloads: dedupedPayloads,
-    sentMediaUrls: params.sentMediaUrls ?? [],
-  });
-  const suppressMessagingToolReplies = shouldSuppressMessagingToolReplies({
+  const sentTargets = params.sentTargets ?? [];
+  const hasSameTargetMessagingToolSend = shouldSuppressMessagingToolReplies({
     messageProvider: replyToChannel,
-    messagingToolSentTargets: params.sentTargets,
+    messagingToolSentTargets: sentTargets,
     originatingTo: resolveOriginMessageTo({
       originatingTo: params.originatingTo,
     }),
@@ -80,5 +73,17 @@ export function resolveFollowupDeliveryPayloads(params: {
       originatingAccountId: params.originatingAccountId,
     }),
   });
-  return suppressMessagingToolReplies ? [] : mediaFilteredPayloads;
+  const dedupeMessagingToolPayloads = hasSameTargetMessagingToolSend || sentTargets.length === 0;
+  if (!dedupeMessagingToolPayloads) {
+    return replyTaggedPayloads;
+  }
+  const mediaFilteredPayloads = filterMessagingToolMediaDuplicates({
+    payloads: replyTaggedPayloads,
+    sentMediaUrls: params.sentMediaUrls ?? [],
+  });
+  return filterMessagingToolDuplicates({
+    allowShortExact: hasSameTargetMessagingToolSend,
+    payloads: mediaFilteredPayloads,
+    sentTexts: params.sentTexts ?? [],
+  });
 }

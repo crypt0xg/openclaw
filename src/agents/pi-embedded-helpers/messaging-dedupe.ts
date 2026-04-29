@@ -19,9 +19,17 @@ export function normalizeTextForComparison(text: string): string {
 export function isMessagingToolDuplicateNormalized(
   normalized: string,
   normalizedSentTexts: string[],
+  options: { allowShortExact?: boolean } = {},
 ): boolean {
   if (normalizedSentTexts.length === 0) {
     return false;
+  }
+  if (
+    options.allowShortExact === true &&
+    normalized.length > 0 &&
+    normalizedSentTexts.some((normalizedSent) => normalizedSent === normalized)
+  ) {
+    return true;
   }
   if (!normalized || normalized.length < MIN_DUPLICATE_TEXT_LENGTH) {
     return false;
@@ -34,13 +42,21 @@ export function isMessagingToolDuplicateNormalized(
   });
 }
 
-export function isMessagingToolDuplicate(text: string, sentTexts: string[]): boolean {
+export function isMessagingToolDuplicate(
+  text: string,
+  sentTexts: string[],
+  options: { allowShortExact?: boolean } = {},
+): boolean {
   if (sentTexts.length === 0) {
     return false;
   }
   const normalized = normalizeTextForComparison(text);
-  if (!normalized || normalized.length < MIN_DUPLICATE_TEXT_LENGTH) {
+  if (!normalized) {
     return false;
   }
-  return isMessagingToolDuplicateNormalized(normalized, sentTexts.map(normalizeTextForComparison));
+  return isMessagingToolDuplicateNormalized(
+    normalized,
+    sentTexts.map(normalizeTextForComparison),
+    options,
+  );
 }

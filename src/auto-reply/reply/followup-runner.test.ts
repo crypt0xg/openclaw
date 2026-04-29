@@ -1122,7 +1122,7 @@ describe("createFollowupRunner messaging delivery and dedupe", () => {
     };
   }
 
-  it("persists usage even when replies are suppressed", async () => {
+  it("persists usage even when duplicate replies are suppressed", async () => {
     const storePath = "/tmp/openclaw-followup-usage.json";
     const sessionKey = "main";
     const sessionEntry: SessionEntry = { sessionId: "session", updatedAt: Date.now() };
@@ -1145,7 +1145,7 @@ describe("createFollowupRunner messaging delivery and dedupe", () => {
 
     const { onBlockReply } = await runMessagingCase({
       agentResult: {
-        ...makeTextReplyDedupeResult(),
+        ...makeTextReplyDedupeResult({ messagingToolSentTexts: ["hello world!"] }),
         messagingToolSentTargets: [{ tool: "slack", provider: "slack", to: "channel:C1" }],
         meta: {
           agentMeta: {
@@ -1180,6 +1180,20 @@ describe("createFollowupRunner messaging delivery and dedupe", () => {
     expect(sessionStore[sessionKey]?.inputTokens).toBe(1_000);
     expect(sessionStore[sessionKey]?.outputTokens).toBe(50);
     persistSpy.mockRestore();
+  });
+
+  it("delivers final text after same-target media-only messaging sends", async () => {
+    const { onBlockReply } = await runMessagingCase({
+      agentResult: {
+        payloads: [{ text: "final answer" }],
+        messagingToolSentMediaUrls: ["/tmp/generated.png"],
+        messagingToolSentTargets: [{ tool: "slack", provider: "slack", to: "channel:C1" }],
+      },
+      queued: baseQueuedRun("slack"),
+    });
+
+    expect(onBlockReply).toHaveBeenCalledTimes(1);
+    expect(onBlockReply).toHaveBeenCalledWith(expect.objectContaining({ text: "final answer" }));
   });
 
   it("passes queued config into usage persistence during drained followups", async () => {

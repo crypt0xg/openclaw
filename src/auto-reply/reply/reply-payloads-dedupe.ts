@@ -16,10 +16,11 @@ import {
 import type { ReplyPayload } from "../types.js";
 
 export function filterMessagingToolDuplicates(params: {
+  allowShortExact?: boolean;
   payloads: ReplyPayload[];
   sentTexts: string[];
 }): ReplyPayload[] {
-  const { payloads, sentTexts } = params;
+  const { allowShortExact, payloads, sentTexts } = params;
   if (sentTexts.length === 0) {
     return payloads;
   }
@@ -27,7 +28,7 @@ export function filterMessagingToolDuplicates(params: {
     if (payload.mediaUrl || payload.mediaUrls?.length) {
       return true;
     }
-    return !isMessagingToolDuplicate(payload.text ?? "", sentTexts);
+    return !isMessagingToolDuplicate(payload.text ?? "", sentTexts, { allowShortExact });
   });
 }
 

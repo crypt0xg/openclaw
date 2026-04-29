@@ -723,4 +723,8 @@ describe("isMessagingToolDuplicate", () => {
   ])("returns $expected for duplicate check", ({ input, sentTexts, expected }) => {
     expect(isMessagingToolDuplicate(input, sentTexts)).toBe(expected);
   });
+
+  it("allows exact short duplicate matching when the caller has same-target proof", () => {
+    expect(isMessagingToolDuplicate("ok", ["ok"], { allowShortExact: true })).toBe(true);
+  });
 });

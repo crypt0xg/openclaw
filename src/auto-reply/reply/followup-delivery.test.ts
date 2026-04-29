@@ -43,27 +43,56 @@ describe("resolveFollowupDeliveryPayloads", () => {
     ).toEqual([{ mediaUrl: undefined, mediaUrls: undefined }]);
   });
 
-  it("suppresses replies when a messaging tool already sent to the same provider and target", () => {
+  it("keeps final text after same-target media-only messaging sends", () => {
+    expect(
+      resolveFollowupDeliveryPayloads({
+        cfg: baseConfig,
+        payloads: [{ text: "final answer" }],
+        messageProvider: "slack",
+        originatingTo: "channel:C1",
+        sentMediaUrls: ["/tmp/img.png"],
+        sentTargets: [{ tool: "slack", provider: "slack", to: "channel:C1" }],
+      }),
+    ).toEqual([{ text: "final answer" }]);
+  });
+
+  it("does not dedupe text for cross-target messaging sends", () => {
     expect(
       resolveFollowupDeliveryPayloads({
         cfg: baseConfig,
         payloads: [{ text: "hello world!" }],
-        messageProvider: "slack",
-        originatingTo: "channel:C1",
-        sentTargets: [{ tool: "slack", provider: "slack", to: "channel:C1" }],
+        messageProvider: "telegram",
+        originatingTo: "telegram:123",
+        sentTexts: ["hello world!"],
+        sentTargets: [{ tool: "discord", provider: "discord", to: "channel:C1" }],
+      }),
+    ).toEqual([{ text: "hello world!" }]);
+  });
+
+  it("dedupes short replies when originating channel resolves the provider", () => {
+    expect(
+      resolveFollowupDeliveryPayloads({
+        cfg: baseConfig,
+        payloads: [{ text: "ok" }],
+        messageProvider: "heartbeat",
+        originatingChannel: "telegram",
+        originatingTo: "268300329",
+        sentTexts: ["ok"],
+        sentTargets: [{ tool: "telegram", provider: "telegram", to: "268300329" }],
       }),
     ).toEqual([]);
   });
 
-  it("suppresses replies when originating channel resolves the provider", () => {
+  it("drops duplicate caption text after same-target media is stripped", () => {
     expect(
       resolveFollowupDeliveryPayloads({
         cfg: baseConfig,
-        payloads: [{ text: "hello world!" }],
-        messageProvider: "heartbeat",
-        originatingChannel: "telegram",
-        originatingTo: "268300329",
-        sentTargets: [{ tool: "telegram", provider: "telegram", to: "268300329" }],
+        payloads: [{ text: "hello world!", mediaUrl: "/tmp/img.png" }],
+        messageProvider: "slack",
+        originatingTo: "channel:C1",
+        sentMediaUrls: ["/tmp/img.png"],
+        sentTargets: [{ tool: "slack", provider: "slack", to: "channel:C1" }],
+        sentTexts: ["hello world!"],
       }),
     ).toEqual([]);
   });

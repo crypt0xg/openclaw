@@ -11,14 +11,14 @@ const baseParams = {
   replyToMode: "off" as const,
 };
 
-async function expectSameTargetRepliesSuppressed(params: { provider: string; to: string }) {
+async function expectSameTargetShortDuplicateDeduped(params: { provider: string; to: string }) {
   const { replyPayloads } = await buildReplyPayloads({
     ...baseParams,
-    payloads: [{ text: "hello world!" }],
+    payloads: [{ text: "ok" }],
     messageProvider: "heartbeat",
     originatingChannel: "feishu",
     originatingTo: "ou_abc123",
-    messagingToolSentTexts: ["different message"],
+    messagingToolSentTexts: ["ok"],
     messagingToolSentTargets: [{ tool: "message", provider: params.provider, to: params.to }],
   });
 
@@ -157,7 +157,21 @@ describe("buildReplyPayloads media filter integration", () => {
     expect(replyPayloads[0]?.mediaUrl).toBe("file:///tmp/photo.jpg");
   });
 
-  it("suppresses same-target replies when messageProvider is synthetic but originatingChannel is set", async () => {
+  it("keeps final text after same-target media-only messaging sends", async () => {
+    const { replyPayloads } = await buildReplyPayloads({
+      ...baseParams,
+      payloads: [{ text: "final answer" }],
+      messageProvider: "slack",
+      originatingTo: "channel:C1",
+      messagingToolSentMediaUrls: ["file:///tmp/photo.jpg"],
+      messagingToolSentTargets: [{ tool: "slack", provider: "slack", to: "channel:C1" }],
+    });
+
+    expect(replyPayloads).toHaveLength(1);
+    expect(replyPayloads[0]?.text).toBe("final answer");
+  });
+
+  it("keeps same-target replies when the messaging tool sent different text", async () => {
     const { replyPayloads } = await buildReplyPayloads({
       ...baseParams,
       payloads: [{ text: "hello world!" }],
@@ -168,14 +182,15 @@ describe("buildReplyPayloads media filter integration", () => {
       messagingToolSentTargets: [{ tool: "telegram", provider: "telegram", to: "268300329" }],
     });
 
-    expect(replyPayloads).toHaveLength(0);
+    expect(replyPayloads).toHaveLength(1);
+    expect(replyPayloads[0]?.text).toBe("hello world!");
   });
 
-  it("suppresses same-target replies when message tool target provider is generic", async () => {
-    await expectSameTargetRepliesSuppressed({ provider: "message", to: "ou_abc123" });
+  it("dedupes short same-target replies when message tool target provider is generic", async () => {
+    await expectSameTargetShortDuplicateDeduped({ provider: "message", to: "ou_abc123" });
   });
 
-  it("suppresses same-target replies when target provider is channel alias", async () => {
+  it("dedupes short same-target replies when target provider is channel alias", async () => {
     resetPluginRuntimeStateForTest();
     setActivePluginRegistry(
       createTestRegistry([
@@ -198,7 +213,7 @@ describe("buildReplyPayloads media filter integration", () => {
         },
       ]),
     );
-    await expectSameTargetRepliesSuppressed({ provider: "lark", to: "ou_abc123" });
+    await expectSameTargetShortDuplicateDeduped({ provider: "lark", to: "ou_abc123" });
   });
 
   it("strips media already sent by the block pipeline after normalizing both paths", async () => {

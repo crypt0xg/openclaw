@@ -1777,10 +1777,23 @@ describe("runReplyAgent messaging tool suppression", () => {
     });
   }
 
-  it("drops replies when a messaging tool sent via the same provider + target", async () => {
+  it("delivers different final text after a messaging tool sent via the same provider and target", async () => {
     runEmbeddedPiAgentMock.mockResolvedValueOnce({
       payloads: [{ text: "hello world!" }],
       messagingToolSentTexts: ["different message"],
+      messagingToolSentTargets: [{ tool: "slack", provider: "slack", to: "channel:C1" }],
+      meta: {},
+    });
+
+    const result = await createRun("slack");
+
+    expect(result).toMatchObject({ text: "hello world!" });
+  });
+
+  it("dedupes short final text sent by a messaging tool to the same provider and target", async () => {
+    runEmbeddedPiAgentMock.mockResolvedValueOnce({
+      payloads: [{ text: "ok" }],
+      messagingToolSentTexts: ["ok"],
       messagingToolSentTargets: [{ tool: "slack", provider: "slack", to: "channel:C1" }],
       meta: {},
     });

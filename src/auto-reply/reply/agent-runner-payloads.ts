@@ -188,7 +188,7 @@ export async function buildReplyPayloads(params: {
   const dedupeRuntime = shouldCheckMessagingToolDedupe
     ? await loadReplyPayloadsDedupeRuntime()
     : null;
-  const suppressMessagingToolReplies =
+  const hasSameTargetMessagingToolSend =
     dedupeRuntime?.shouldSuppressMessagingToolReplies({
       messageProvider: resolveOriginMessageProvider({
         originatingChannel: params.originatingChannel,
@@ -207,7 +207,7 @@ export async function buildReplyPayloads(params: {
   // suppress the current conversation's final reply.
   // If target metadata is unavailable, keep legacy dedupe behavior.
   const dedupeMessagingToolPayloads =
-    suppressMessagingToolReplies || messagingToolSentTargets.length === 0;
+    hasSameTargetMessagingToolSend || messagingToolSentTargets.length === 0;
   const messagingToolSentMediaUrls = dedupeMessagingToolPayloads
     ? await normalizeSentMediaUrlsForDedupe({
         sentMediaUrls: params.messagingToolSentMediaUrls ?? [],
@@ -224,6 +224,7 @@ export async function buildReplyPayloads(params: {
     : silentFilteredPayloads;
   const dedupedPayloads = dedupeMessagingToolPayloads
     ? (dedupeRuntime ?? (await loadReplyPayloadsDedupeRuntime())).filterMessagingToolDuplicates({
+        allowShortExact: hasSameTargetMessagingToolSend,
         payloads: mediaFilteredPayloads,
         sentTexts: messagingToolSentTexts,
       })
@@ -284,9 +285,7 @@ export async function buildReplyPayloads(params: {
           sentMediaUrls: blockSentMediaUrls,
         })
       : contentSuppressedPayloads;
-  const replyPayloads = suppressMessagingToolReplies
-    ? []
-    : filteredPayloads.filter(isRenderablePayload);
+  const replyPayloads = filteredPayloads.filter(isRenderablePayload);
 
   return {
     replyPayloads,
