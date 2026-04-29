@@ -19,6 +19,7 @@ describe("acquireFileLock", () => {
 
   afterEach(async () => {
     await drainFileLockStateForTest();
+    vi.restoreAllMocks();
     if (tempDir) {
       await fs.rm(tempDir, { recursive: true, force: true });
     }
