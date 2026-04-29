@@ -1,6 +1,6 @@
 ---
 name: clownfish-cloud-pr
-description: Use when launching Clownfish in GitHub Actions to create or update one guarded GitHub implementation PR from issue/PR refs, a ClawSweeper report, a custom maintainer prompt, or to opt an existing Clownfish PR into ClawSweeper-reviewed cloud automerge.
+description: Use when launching Clownfish in GitHub Actions to create or update one guarded GitHub implementation PR from issue/PR refs, a ClawSweeper report, a custom maintainer prompt, or opt any PR into ClawSweeper-reviewed cloud automerge.
 ---
 
 # Clownfish Cloud PR
@@ -114,8 +114,8 @@ Supported commands:
 
 The router accepts `OWNER`, `MEMBER`, and `COLLABORATOR` comments by default.
 Contributor comments are ignored without a reply. Repair commands dispatch
-`cluster-worker.yml` only for existing Clownfish PRs with the `clownfish` label
-or `clownfish/*` branch.
+`cluster-worker.yml` for existing Clownfish PRs and for PRs explicitly opted
+into `clownfish:automerge`.
 
 ```bash
 npm run comment-router -- --repo openclaw/openclaw --lookback-minutes 180
@@ -127,20 +127,23 @@ Scheduled routing stays dry until `CLOWNFISH_COMMENT_ROUTER_EXECUTE=1` is set in
 
 ## Bounded ClawSweeper-Reviewed Automerge
 
-Use this only for an existing Clownfish PR that maps back to a `clownfish/*`
-branch and job file:
+Use this on any open target-repo PR:
 
 ```text
 /clownfish automerge
 ```
 
 The router verifies the commenter is a maintainer, adds
-`clownfish:automerge`, dispatches ClawSweeper for the current PR head, and
-waits for trusted ClawSweeper markers. `needs-changes` / `fix-required`
-dispatches the normal repair worker. `pass`, `approved`, or `no-changes` may
-merge only when the marker SHA matches the current PR head, checks are green,
-GitHub says the PR is mergeable, no `clownfish:human-review` label is present,
-and both merge gates are open:
+`clownfish:automerge`, creates a durable adopted job under
+`jobs/<owner>/inbox/automerge-<owner>-<repo>-<pr>.md` when the PR is not
+already backed by a Clownfish job, dispatches ClawSweeper for the current PR
+head, and waits for trusted ClawSweeper markers. `needs-changes` /
+`fix-required` dispatches the normal repair worker. The worker updates the
+source branch when safe, otherwise opens a credited replacement or returns
+`needs_human`. `pass`, `approved`, or `no-changes` may merge only when the
+marker SHA matches the current PR head, checks are green, GitHub says the PR is
+mergeable, no `clownfish:human-review` label is present, and both merge gates
+are open:
 
 ```bash
 gh variable set CLOWNFISH_ALLOW_MERGE --repo openclaw/clownfish --body 1
@@ -160,6 +163,9 @@ The repair loop is capped by `CLOWNFISH_CLAWSWEEPER_MAX_REPAIRS_PER_PR`
 ## Guardrails
 
 - One cluster, one branch, one PR: `clownfish/<cluster-id>`.
+- For adopted automerge PRs, the worker may repair the source branch only when
+  GitHub reports it is safe to update; router-owned merge still requires a
+  fresh ClawSweeper pass for the exact head.
 - No security-sensitive work.
 - New replacement PRs are capped per touched area by
   `CLOWNFISH_MAX_ACTIVE_PRS_PER_AREA`.
