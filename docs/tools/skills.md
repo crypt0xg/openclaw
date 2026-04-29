@@ -29,6 +29,13 @@ OpenClaw loads skills from these sources, **highest precedence first**:
 
 If a skill name conflicts, the highest source wins.
 
+Each source can contain skill folders directly (`<root>/<skill>/SKILL.md`)
+or one level of grouping (`<root>/<group>/<skill>/SKILL.md`). Group
+directory names are only organizational; precedence and `skills.entries`
+matching still use the skill name from `SKILL.md` (or the skill folder
+name when frontmatter omits `name`). Discovery does not recurse beyond
+that grouped layout.
+
 ## Per-agent vs shared skills
 
 In **multi-agent** setups each agent has its own workspace:
@@ -145,7 +152,7 @@ Prefer sandboxed runs for untrusted inputs and risky tools. See
 [Sandboxing](/gateway/sandboxing) for the agent-side controls.
 </Warning>
 
-- Workspace and extra-dir skill discovery only accepts skill roots and `SKILL.md` files whose resolved realpath stays inside the configured root.
+- Skill discovery only accepts direct or one-level grouped skill roots and `SKILL.md` files whose resolved realpath stays inside the configured root.
 - Gateway-backed skill dependency installs (`skills.install`, onboarding, and the Skills settings UI) run the built-in dangerous-code scanner before executing installer metadata. `critical` findings block by default unless the caller explicitly sets the dangerous override; suspicious findings still warn only.
 - `openclaw skills install <slug>` is different — it downloads a ClawHub skill folder into the workspace and does not use the installer-metadata path above.
 - `skills.entries.*.env` and `skills.entries.*.apiKey` inject secrets into the **host** process for that agent turn (not the sandbox). Keep secrets out of prompts and logs.

@@ -178,10 +178,26 @@ function listChildDirectories(dir: string): string[] {
         }
       }
     }
-    return dirs;
+    return dirs.sort((a, b) => a.localeCompare(b, "en"));
   } catch {
     return [];
   }
+}
+
+function listLimitedChildDirectories(
+  dir: string,
+  opts: {
+    maxCandidatesPerRoot: number;
+  },
+): { childDirs: string[]; childDirCount: number; truncated: boolean } {
+  const childDirs = listChildDirectories(dir);
+  const maxCandidates = Math.max(0, opts.maxCandidatesPerRoot);
+  const limited = maxCandidates === 0 ? [] : childDirs.slice(0, maxCandidates);
+  return {
+    childDirs: limited,
+    childDirCount: childDirs.length,
+    truncated: childDirs.length > limited.length,
+  };
 }
 
 function tryRealpath(filePath: string): string | null {
@@ -314,6 +330,176 @@ function filterLoadedSkillRecordsInsideRoot(params: {
   });
 }
 
+type SkillDirectoryCandidate = {
+  dir: string;
+  realPath?: string;
+  label: string;
+};
+
+function warnLargeSkillsDirectory(params: {
+  message: string;
+  dir: string;
+  baseDir: string;
+  childDirCount: number;
+  maxCandidatesPerRoot: number;
+  maxSkillsLoadedPerSource: number;
+}) {
+  skillsLogger.warn(params.message, {
+    dir: params.dir,
+    baseDir: params.baseDir,
+    childDirCount: params.childDirCount,
+    maxCandidatesPerRoot: params.maxCandidatesPerRoot,
+    maxSkillsLoadedPerSource: params.maxSkillsLoadedPerSource,
+  });
+}
+
+function warnSkillsDirectorySize(params: {
+  dir: string;
+  baseDir: string;
+  listing: { childDirCount: number; truncated: boolean };
+  limits: ResolvedSkillsLimits;
+  messagePrefix: "Skills root" | "Skills group";
+}) {
+  if (params.listing.truncated) {
+    warnLargeSkillsDirectory({
+      message: `${params.messagePrefix} looks suspiciously large, truncating discovery.`,
+      dir: params.dir,
+      baseDir: params.baseDir,
+      childDirCount: params.listing.childDirCount,
+      maxCandidatesPerRoot: params.limits.maxCandidatesPerRoot,
+      maxSkillsLoadedPerSource: params.limits.maxSkillsLoadedPerSource,
+    });
+    return;
+  }
+  if (params.listing.childDirCount > Math.max(0, params.limits.maxSkillsLoadedPerSource)) {
+    skillsLogger.warn(`${params.messagePrefix} has many entries, truncating discovery.`, {
+      dir: params.dir,
+      baseDir: params.baseDir,
+      childDirCount: params.listing.childDirCount,
+      maxSkillsLoadedPerSource: params.limits.maxSkillsLoadedPerSource,
+    });
+  }
+}
+
+function* discoverSkillDirectoryCandidates(params: {
+  baseDir: string;
+  baseDirRealPath: string;
+  source: string;
+  rootDir: string;
+  limits: ResolvedSkillsLimits;
+}): Generator<SkillDirectoryCandidate> {
+  const rootListing = listLimitedChildDirectories(params.baseDir, {
+    maxCandidatesPerRoot: params.limits.maxCandidatesPerRoot,
+  });
+  warnSkillsDirectorySize({
+    dir: params.rootDir,
+    baseDir: params.baseDir,
+    listing: rootListing,
+    limits: params.limits,
+    messagePrefix: "Skills root",
+  });
+
+  for (const name of rootListing.childDirs) {
+    const childDir = path.join(params.baseDir, name);
+    const childDirRealPath = resolveContainedSkillPath({
+      source: params.source,
+      rootDir: params.rootDir,
+      rootRealPath: params.baseDirRealPath,
+      candidatePath: childDir,
+    });
+    if (!childDirRealPath) {
+      continue;
+    }
+
+    if (fs.existsSync(path.join(childDir, "SKILL.md"))) {
+      yield { dir: childDir, realPath: childDirRealPath, label: name };
+      continue;
+    }
+
+    const groupListing = listLimitedChildDirectories(childDir, {
+      maxCandidatesPerRoot: params.limits.maxCandidatesPerRoot,
+    });
+    if (groupListing.childDirCount === 0) {
+      continue;
+    }
+    warnSkillsDirectorySize({
+      dir: childDir,
+      baseDir: childDir,
+      listing: groupListing,
+      limits: params.limits,
+      messagePrefix: "Skills group",
+    });
+
+    for (const nestedName of groupListing.childDirs) {
+      yield {
+        dir: path.join(childDir, nestedName),
+        label: `${name}/${nestedName}`,
+      };
+    }
+  }
+}
+
+function loadSkillDirectoryCandidate(params: {
+  candidate: SkillDirectoryCandidate;
+  source: string;
+  rootDir: string;
+  rootRealPath: string;
+  maxSkillFileBytes: number;
+}): LoadedSkillRecord[] {
+  const skillDirRealPath =
+    params.candidate.realPath ??
+    resolveContainedSkillPath({
+      source: params.source,
+      rootDir: params.rootDir,
+      rootRealPath: params.rootRealPath,
+      candidatePath: params.candidate.dir,
+    });
+  if (!skillDirRealPath) {
+    return [];
+  }
+
+  const skillMd = path.join(params.candidate.dir, "SKILL.md");
+  if (!fs.existsSync(skillMd)) {
+    return [];
+  }
+  const skillMdRealPath = resolveContainedSkillPath({
+    source: params.source,
+    rootDir: params.rootDir,
+    rootRealPath: params.rootRealPath,
+    candidatePath: skillMd,
+  });
+  if (!skillMdRealPath) {
+    return [];
+  }
+
+  try {
+    const size = fs.statSync(skillMdRealPath).size;
+    if (size > params.maxSkillFileBytes) {
+      skillsLogger.warn("Skipping skill due to oversized SKILL.md.", {
+        skill: params.candidate.label,
+        filePath: skillMd,
+        size,
+        maxSkillFileBytes: params.maxSkillFileBytes,
+      });
+      return [];
+    }
+  } catch {
+    return [];
+  }
+
+  const loaded = loadSkillsFromDirSafe({
+    dir: params.candidate.dir,
+    source: params.source,
+    maxBytes: params.maxSkillFileBytes,
+  });
+  return filterLoadedSkillRecordsInsideRoot({
+    records: unwrapLoadedSkillRecords(loaded),
+    source: params.source,
+    rootDir: params.rootDir,
+    rootRealPath: params.rootRealPath,
+  });
+}
+
 function resolveNestedSkillsRoot(
   dir: string,
   opts?: {
@@ -436,86 +622,30 @@ function loadSkillEntries(
       });
     }
 
-    const childDirs = listChildDirectories(baseDir);
-    const suspicious = childDirs.length > limits.maxCandidatesPerRoot;
-
-    const maxCandidates = Math.max(0, limits.maxSkillsLoadedPerSource);
-    const limitedChildren = childDirs.toSorted().slice(0, maxCandidates);
-
-    if (suspicious) {
-      skillsLogger.warn("Skills root looks suspiciously large, truncating discovery.", {
-        dir: params.dir,
-        baseDir,
-        childDirCount: childDirs.length,
-        maxCandidatesPerRoot: limits.maxCandidatesPerRoot,
-        maxSkillsLoadedPerSource: limits.maxSkillsLoadedPerSource,
-      });
-    } else if (childDirs.length > maxCandidates) {
-      skillsLogger.warn("Skills root has many entries, truncating discovery.", {
-        dir: params.dir,
-        baseDir,
-        childDirCount: childDirs.length,
-        maxSkillsLoadedPerSource: limits.maxSkillsLoadedPerSource,
-      });
-    }
-
     const loadedSkills: LoadedSkillRecord[] = [];
+    const maxSkillsToLoad = Math.max(0, limits.maxSkillsLoadedPerSource);
 
-    // Only consider immediate subfolders that look like skills (have SKILL.md) and are under size cap.
-    for (const name of limitedChildren) {
-      const skillDir = path.join(baseDir, name);
-      const skillDirRealPath = resolveContainedSkillPath({
-        source: params.source,
-        rootDir,
-        rootRealPath: baseDirRealPath,
-        candidatePath: skillDir,
-      });
-      if (!skillDirRealPath) {
-        continue;
+    for (const candidate of discoverSkillDirectoryCandidates({
+      baseDir,
+      baseDirRealPath,
+      source: params.source,
+      rootDir,
+      limits,
+    })) {
+      if (loadedSkills.length >= maxSkillsToLoad) {
+        break;
       }
-      const skillMd = path.join(skillDir, "SKILL.md");
-      if (!fs.existsSync(skillMd)) {
-        continue;
-      }
-      const skillMdRealPath = resolveContainedSkillPath({
-        source: params.source,
-        rootDir,
-        rootRealPath: baseDirRealPath,
-        candidatePath: skillMd,
-      });
-      if (!skillMdRealPath) {
-        continue;
-      }
-      try {
-        const size = fs.statSync(skillMdRealPath).size;
-        if (size > limits.maxSkillFileBytes) {
-          skillsLogger.warn("Skipping skill due to oversized SKILL.md.", {
-            skill: name,
-            filePath: skillMd,
-            size,
-            maxSkillFileBytes: limits.maxSkillFileBytes,
-          });
-          continue;
-        }
-      } catch {
-        continue;
-      }
-
-      const loaded = loadSkillsFromDirSafe({
-        dir: skillDir,
-        source: params.source,
-        maxBytes: limits.maxSkillFileBytes,
-      });
       loadedSkills.push(
-        ...filterLoadedSkillRecordsInsideRoot({
-          records: unwrapLoadedSkillRecords(loaded),
+        ...loadSkillDirectoryCandidate({
+          candidate,
           source: params.source,
           rootDir,
           rootRealPath: baseDirRealPath,
+          maxSkillFileBytes: limits.maxSkillFileBytes,
         }),
       );
 
-      if (loadedSkills.length >= limits.maxSkillsLoadedPerSource) {
+      if (loadedSkills.length >= maxSkillsToLoad) {
         break;
       }
     }

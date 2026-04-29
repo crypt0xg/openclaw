@@ -234,6 +234,83 @@ describe("loadWorkspaceSkillEntries", () => {
     expect(hiddenEntry?.exposure?.includeInAvailableSkillsPrompt).toBe(false);
   });
 
+  it("loads one-level grouped skills from configured roots", async () => {
+    const workspaceDir = await createTempWorkspaceDir();
+    const managedDir = path.join(workspaceDir, ".managed");
+    const extraDir = path.join(workspaceDir, ".extra-skills");
+
+    await writeSkill({
+      dir: path.join(workspaceDir, "skills", "team", "workspace-grouped"),
+      name: "workspace-grouped",
+      description: "Workspace grouped",
+    });
+    await writeSkill({
+      dir: path.join(managedDir, "packs", "managed-grouped"),
+      name: "managed-grouped",
+      description: "Managed grouped",
+    });
+    await writeSkill({
+      dir: path.join(extraDir, "community", "extra-grouped"),
+      name: "extra-grouped",
+      description: "Extra grouped",
+    });
+
+    const entries = loadTestWorkspaceSkillEntries(workspaceDir, {
+      managedSkillsDir: managedDir,
+      config: {
+        skills: {
+          load: {
+            extraDirs: [extraDir],
+          },
+        },
+      },
+    });
+
+    const byName = new Map(entries.map((entry) => [entry.skill.name, entry]));
+    expect([...byName.keys()]).toEqual(["extra-grouped", "managed-grouped", "workspace-grouped"]);
+    expect(byName.get("workspace-grouped")?.skill.filePath).toBe(
+      path.join(workspaceDir, "skills", "team", "workspace-grouped", "SKILL.md"),
+    );
+    expect(byName.get("managed-grouped")?.skill.filePath).toBe(
+      path.join(managedDir, "packs", "managed-grouped", "SKILL.md"),
+    );
+    expect(byName.get("extra-grouped")?.skill.filePath).toBe(
+      path.join(extraDir, "community", "extra-grouped", "SKILL.md"),
+    );
+  });
+
+  it("keeps grouped discovery bounded by candidate and skill-count limits", async () => {
+    const workspaceDir = await createTempWorkspaceDir();
+    for (let index = 0; index < 4; index += 1) {
+      await writeSkill({
+        dir: path.join(workspaceDir, "skills", "group", `skill-${index}`),
+        name: `grouped-${index}`,
+        description: `Grouped ${index}`,
+      });
+    }
+    await writeSkill({
+      dir: path.join(workspaceDir, "skills", "later-group", "later-skill"),
+      name: "later-skill",
+      description: "Later skill",
+    });
+    const warn = captureWarningLogger();
+
+    const entries = loadTestWorkspaceSkillEntries(workspaceDir, {
+      config: {
+        skills: {
+          limits: {
+            maxCandidatesPerRoot: 2,
+            maxSkillsLoadedPerSource: 2,
+          },
+        },
+      },
+    });
+
+    expect(entries.map((entry) => entry.skill.name)).toEqual(["grouped-0", "grouped-1"]);
+    const warningLines = warn.mock.calls.map(([line]) => String(line)).join("\n");
+    expect(warningLines).toContain("group looks suspiciously large, truncating discovery.");
+  });
+
   it("applies agent skill filters and replacement semantics", async () => {
     const workspaceDir = await createTempWorkspaceDir();
     await writeWorkspaceSkills(workspaceDir, [
