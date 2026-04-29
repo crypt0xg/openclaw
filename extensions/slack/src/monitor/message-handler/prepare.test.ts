@@ -27,6 +27,16 @@ import {
   createSlackTestAccount,
 } from "./prepare.test-helpers.js";
 
+const enqueueSystemEventMock = vi.hoisted(() => vi.fn());
+
+vi.mock("openclaw/plugin-sdk/system-event-runtime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("openclaw/plugin-sdk/system-event-runtime")>();
+  return {
+    ...actual,
+    enqueueSystemEvent: (...args: unknown[]) => enqueueSystemEventMock(...args),
+  };
+});
+
 describe("slack prepareSlackMessage inbound contract", () => {
   const storeFixture = createSlackSessionStoreFixture("openclaw-slack-thread-");
 
@@ -37,6 +47,7 @@ describe("slack prepareSlackMessage inbound contract", () => {
   beforeEach(() => {
     resetSlackThreadStarterCacheForTest();
     clearSlackThreadParticipationCache();
+    enqueueSystemEventMock.mockClear();
   });
 
   afterAll(() => {
@@ -98,6 +109,20 @@ describe("slack prepareSlackMessage inbound contract", () => {
       opts: { source: "message" },
     });
   }
+
+  it("queues inbound message system events as untrusted", async () => {
+    const prepared = await prepareWithDefaultCtx(createSlackMessage({}));
+
+    expect(prepared).toBeTruthy();
+    expect(enqueueSystemEventMock).toHaveBeenCalledWith(
+      expect.stringContaining("Slack DM from Alice: hi"),
+      expect.objectContaining({
+        sessionKey: expect.any(String),
+        contextKey: "slack:message:D123:1.000",
+        trusted: false,
+      }),
+    );
+  });
 
   function createThreadSlackCtx(params: { cfg: OpenClawConfig; replies: unknown }) {
     return createInboundSlackCtx({
