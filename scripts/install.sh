@@ -1633,6 +1633,8 @@ fix_npm_permissions() {
         return 0
     fi
 
+    ui_warn "npm global prefix is not writable: ${npm_prefix}"
+    ui_warn "The installer will switch npm's user prefix to ${HOME}/.npm-global; npm normally writes that setting to ~/.npmrc."
     ui_info "Configuring npm for user-local installs"
     mkdir -p "$HOME/.npm-global"
     npm config set prefix "$HOME/.npm-global"
