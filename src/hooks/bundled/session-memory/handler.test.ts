@@ -432,16 +432,24 @@ describe("session-memory hook", () => {
     expect(memoryContent).toContain("assistant: Recovered from reset fallback");
   });
 
-  it("handles reset-path session pointers from previousSessionEntry", async () => {
-    const { sessionsDir } = await createSessionMemoryWorkspace();
+  it("handles reset-path session pointers without selecting unrelated transcripts", async () => {
+    const { tempDir, sessionsDir } = await createSessionMemoryWorkspace();
 
-    const sessionId = "reset-pointer-session";
+    const sessionId = "target-session";
     const resetSessionFile = await writeWorkspaceFile({
       dir: sessionsDir,
       name: `${sessionId}.jsonl.reset.2026-02-16T22-26-33.000Z`,
       content: createMockSessionContent([
         { role: "user", content: "Message from reset pointer" },
         { role: "assistant", content: "Recovered directly from reset file" },
+      ]),
+    });
+    await writeWorkspaceFile({
+      dir: sessionsDir,
+      name: "zzz-other.jsonl",
+      content: createMockSessionContent([
+        { role: "user", content: "Unrelated conversation" },
+        { role: "assistant", content: "Should not be persisted" },
       ]),
     });
 
@@ -455,6 +463,19 @@ describe("session-memory hook", () => {
     const memoryContent = await getRecentSessionContentWithResetFallback(resetSessionFile);
     expect(memoryContent).toContain("user: Message from reset pointer");
     expect(memoryContent).toContain("assistant: Recovered directly from reset file");
+
+    const result = await runNewWithPreviousSessionEntry({
+      tempDir,
+      action: "reset",
+      previousSessionEntry: {
+        sessionId,
+        sessionFile: resetSessionFile,
+      },
+    });
+    expect(result.files.length).toBe(1);
+    expect(result.memoryContent).toContain("user: Message from reset pointer");
+    expect(result.memoryContent).toContain("assistant: Recovered directly from reset file");
+    expect(result.memoryContent).not.toContain("Unrelated conversation");
   });
 
   it("recovers transcript when previousSessionEntry.sessionFile is missing", async () => {

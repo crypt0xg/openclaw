@@ -130,7 +130,12 @@ export async function findPreviousSessionFile(params: {
       }
     }
 
-    if (!params.currentSessionFile) {
+    // A reset archive path already points at a concrete transcript; never
+    // recover it by choosing an unrelated newest transcript in the directory.
+    if (
+      !params.currentSessionFile ||
+      path.basename(params.currentSessionFile).includes(".reset.")
+    ) {
       return undefined;
     }
 
