@@ -258,12 +258,19 @@ or overlapping changed hunks.
 The `CodeQL` workflow is intentionally a narrow first-pass security scanner,
 not the full repository sweep. Daily and manual runs scan Actions workflow code
 plus the highest-risk JavaScript/TypeScript auth, secrets, sandbox, cron, and
-gateway surfaces with high-precision security queries. The
-channel-runtime-boundary job separately scans core channel implementation
-contracts plus the channel plugin runtime, gateway, Plugin SDK, secrets, and
-audit touchpoints under the `/codeql-critical-security/channel-runtime-boundary`
-category so channel security signal can scale without broadening the baseline
-JS/TS category.
+gateway surfaces with high-precision security queries. Manual dispatch accepts
+`profile=all|security|local-shell`; `local-shell` is a manual-only teaching and
+validation shard for shell/command-exec boundaries that is not yet part of the
+scheduled baseline. The channel-runtime-boundary job separately scans core
+channel implementation contracts plus the channel plugin runtime, gateway,
+Plugin SDK, secrets, and audit touchpoints under the
+`/codeql-critical-security/channel-runtime-boundary` category so channel
+security signal can scale without broadening the baseline JS/TS category. The
+local-shell-runtime-boundary job scans the local TUI shell runner, Windows
+spawn fallback helpers, qmd spawn wrappers, and the Bonjour Windows shell
+bridge under the `/codeql-critical-security/local-shell-runtime-boundary`
+category so maintainers can validate CodeQL signal on a narrow exec-heavy
+surface before deciding whether to schedule it by default.
 
 The `CodeQL Android Critical Security` workflow is the scheduled Android
 security shard. It builds the Android app manually for CodeQL on the smallest
