@@ -34,6 +34,13 @@ describe("shared/string-normalization", () => {
     expect(normalizeHyphenSlug(" ###Team@@@Room### ")).toBe("###team@@@room###");
   });
 
+  it("preserves Unicode letters, decimal digits, and combining marks in hyphen slugs", () => {
+    expect(normalizeHyphenSlug("  北京 Комната غرفة ١٢٣ cafe\u0301  ")).toBe(
+      "北京-комната-غرفة-١٢٣-cafe\u0301",
+    );
+    expect(normalizeHyphenSlug(" #Канал_频道 + غرفة\u0651 ")).toBe("#канал_频道-+-غرفة\u0651");
+  });
+
   it("normalizes @/# prefixed slugs used by channel allowlists", () => {
     expect(normalizeAtHashSlug(" #My_Channel + Alerts ")).toBe("my-channel-alerts");
     expect(normalizeAtHashSlug("@@Room___Name")).toBe("room-name");
@@ -44,5 +51,12 @@ describe("shared/string-normalization", () => {
   it("strips repeated prefixes and collapses separator-only results", () => {
     expect(normalizeAtHashSlug("###__Room  Name__")).toBe("room-name");
     expect(normalizeAtHashSlug("@@@___")).toBe("");
+  });
+
+  it("preserves Unicode letters, decimal digits, and combining marks in @/# slugs", () => {
+    expect(normalizeAtHashSlug(" @北京_Комната غرفة ١٢٣ cafe\u0301 ")).toBe(
+      "北京-комната-غرفة-١٢٣-cafe\u0301",
+    );
+    expect(normalizeAtHashSlug("##غرفة\u0651__频道")).toBe("غرفة\u0651-频道");
   });
 });

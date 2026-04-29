@@ -1,5 +1,8 @@
 import { normalizeOptionalLowercaseString, normalizeOptionalString } from "./string-coerce.js";
 
+const HYPHEN_SLUG_UNSUPPORTED_CHARS = /[^\p{Letter}\p{Decimal_Number}\p{Mark}#@._+-]+/gu;
+const AT_HASH_SLUG_UNSUPPORTED_CHARS = /[^\p{Letter}\p{Decimal_Number}\p{Mark}-]+/gu;
+
 export function normalizeStringEntries(list?: ReadonlyArray<unknown>) {
   return (list ?? []).map((entry) => normalizeOptionalString(String(entry)) ?? "").filter(Boolean);
 }
@@ -57,7 +60,7 @@ export function normalizeHyphenSlug(raw?: string | null) {
     return "";
   }
   const dashed = trimmed.replace(/\s+/g, "-");
-  const cleaned = dashed.replace(/[^a-z0-9#@._+-]+/g, "-");
+  const cleaned = dashed.replace(HYPHEN_SLUG_UNSUPPORTED_CHARS, "-");
   return cleaned.replace(/-{2,}/g, "-").replace(/^[-.]+|[-.]+$/g, "");
 }
 
@@ -68,6 +71,6 @@ export function normalizeAtHashSlug(raw?: string | null) {
   }
   const withoutPrefix = trimmed.replace(/^[@#]+/, "");
   const dashed = withoutPrefix.replace(/[\s_]+/g, "-");
-  const cleaned = dashed.replace(/[^a-z0-9-]+/g, "-");
+  const cleaned = dashed.replace(AT_HASH_SLUG_UNSUPPORTED_CHARS, "-");
   return cleaned.replace(/-{2,}/g, "-").replace(/^-+|-+$/g, "");
 }
