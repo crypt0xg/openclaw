@@ -297,11 +297,11 @@ export function lookupContextTokens(
     primeConfiguredContextWindows();
   } else {
     // Best-effort: kick off loading on demand, but don't block lookups.
-    void ensureContextWindowCacheLoaded({
-      ...(options?.providerDiscoveryProviderIds
+    void ensureContextWindowCacheLoaded(
+      options?.providerDiscoveryProviderIds
         ? { providerDiscoveryProviderIds: options.providerDiscoveryProviderIds }
-        : {}),
-    });
+        : undefined,
+    );
   }
   return lookupCachedContextTokens(modelId);
 }
