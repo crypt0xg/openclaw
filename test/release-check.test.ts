@@ -478,6 +478,17 @@ describe("collectForbiddenPackPaths", () => {
     );
   });
 
+  it("ships scripts required by packaged postinstall", () => {
+    const pkg = JSON.parse(readFileSync("package.json", "utf8")) as { files?: string[] };
+    expect(pkg.files).toEqual(
+      expect.arrayContaining([
+        "scripts/lib/bundled-runtime-deps-install.mjs",
+        "scripts/lib/package-dist-imports.mjs",
+        "scripts/postinstall-bundled-plugins.mjs",
+      ]),
+    );
+  });
+
   it("blocks legacy runtime dependency stamps from npm pack output", () => {
     expect(
       collectForbiddenPackPaths([
@@ -583,6 +594,7 @@ describe("collectMissingPackPaths", () => {
         "dist/control-ui/index.html",
         "scripts/npm-runner.mjs",
         "scripts/preinstall-package-manager-warning.mjs",
+        "scripts/lib/bundled-runtime-deps-install.mjs",
         "scripts/lib/package-dist-imports.mjs",
         "scripts/postinstall-bundled-plugins.mjs",
         "dist/task-registry-control.runtime.js",
@@ -615,6 +627,7 @@ describe("collectMissingPackPaths", () => {
         ...WORKSPACE_TEMPLATE_PACK_PATHS,
         "scripts/npm-runner.mjs",
         "scripts/preinstall-package-manager-warning.mjs",
+        "scripts/lib/bundled-runtime-deps-install.mjs",
         "scripts/lib/package-dist-imports.mjs",
         "scripts/postinstall-bundled-plugins.mjs",
         "dist/plugin-sdk/root-alias.cjs",

@@ -238,7 +238,7 @@ function runNpmInstall(params) {
     }),
     spawnSyncImpl: params.spawnSyncImpl,
     stdio: ["ignore", "pipe", "pipe"],
-    timeout: params.timeoutMs ?? 5 * 60 * 1000,
+    timeoutMs: params.timeoutMs ?? 5 * 60 * 1000,
   });
 }
 

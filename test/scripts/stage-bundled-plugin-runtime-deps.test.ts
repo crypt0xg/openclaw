@@ -155,6 +155,29 @@ describe("stageBundledPluginRuntimeDeps", () => {
     );
   });
 
+  it("applies the fallback runtime install timeout by default", () => {
+    const spawnSyncImpl = vi.fn(() => ({ status: 0, stderr: "", stdout: "" }));
+
+    stageBundledPluginRuntimeDepsTesting.runNpmInstall({
+      cwd: "/tmp/openclaw-runtime-deps",
+      npmRunner: {
+        command: "npm",
+        args: ["install"],
+        env: { PATH: "/usr/bin" },
+        shell: false,
+      },
+      spawnSyncImpl,
+    });
+
+    expect(spawnSyncImpl).toHaveBeenCalledWith(
+      "npm",
+      ["install"],
+      expect.objectContaining({
+        timeout: 5 * 60 * 1000,
+      }),
+    );
+  });
+
   it("forces fallback runtime installs off inherited npm dry-run mode", () => {
     const spawnSyncImpl = vi.fn(() => ({ status: 0, stderr: "", stdout: "" }));
 

@@ -146,6 +146,10 @@ describe("docker build cache layout", () => {
   it("copies .npmrc before install in the cleanup smoke image", async () => {
     const dockerfile = await readRepoFile("scripts/docker/cleanup-smoke/Dockerfile");
     const installIndex = dockerfile.indexOf("pnpm install --frozen-lockfile");
+    const postinstallIndex = dockerfile.indexOf("COPY scripts/postinstall-bundled-plugins.mjs");
+    const helperCopyIndex = dockerfile.indexOf(
+      "COPY scripts/lib/bundled-runtime-deps-install.mjs scripts/lib/package-dist-imports.mjs ./scripts/lib/",
+    );
 
     expect(
       indexOfPattern(
@@ -153,6 +157,10 @@ describe("docker build cache layout", () => {
         /^COPY(?:\s+--chown=\S+)?\s+package\.json pnpm-lock\.yaml pnpm-workspace\.yaml \.npmrc \.\/$/m,
       ),
     ).toBeLessThan(installIndex);
+    expect(postinstallIndex).toBeGreaterThan(-1);
+    expect(helperCopyIndex).toBeGreaterThan(-1);
+    expect(postinstallIndex).toBeLessThan(installIndex);
+    expect(helperCopyIndex).toBeLessThan(installIndex);
     expect(indexOfPattern(dockerfile, /^COPY(?:\s+--chown=\S+)?\s+\.\s+\.$/m)).toBeGreaterThan(
       installIndex,
     );

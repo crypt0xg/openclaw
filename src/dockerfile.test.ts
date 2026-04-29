@@ -78,14 +78,14 @@ describe("Dockerfile", () => {
     const dockerfile = await readFile(dockerfilePath, "utf8");
     const installIndex = dockerfile.indexOf("pnpm install --frozen-lockfile");
     const postinstallIndex = dockerfile.indexOf("COPY scripts/postinstall-bundled-plugins.mjs");
-    const distImportHelperIndex = dockerfile.indexOf(
-      "COPY scripts/lib/package-dist-imports.mjs ./scripts/lib/package-dist-imports.mjs",
+    const helperCopyIndex = dockerfile.indexOf(
+      "COPY scripts/lib/bundled-runtime-deps-install.mjs scripts/lib/package-dist-imports.mjs ./scripts/lib/",
     );
 
     expect(postinstallIndex).toBeGreaterThan(-1);
-    expect(distImportHelperIndex).toBeGreaterThan(-1);
+    expect(helperCopyIndex).toBeGreaterThan(-1);
     expect(postinstallIndex).toBeLessThan(installIndex);
-    expect(distImportHelperIndex).toBeLessThan(installIndex);
+    expect(helperCopyIndex).toBeLessThan(installIndex);
   });
 
   it("prunes runtime dependencies after the build stage", async () => {
