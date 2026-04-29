@@ -482,9 +482,13 @@ describe("chat slash menu accessibility", () => {
     const listbox = container.querySelector<HTMLElement>("#chat-slash-menu-listbox");
     const activeId = textarea?.getAttribute("aria-activedescendant");
 
-    expect(combobox?.getAttribute("role")).toBe("combobox");
-    expect(combobox?.getAttribute("aria-expanded")).toBe("true");
-    expect(combobox?.getAttribute("aria-haspopup")).toBe("listbox");
+    expect(combobox?.hasAttribute("role")).toBe(false);
+    expect(combobox?.hasAttribute("aria-expanded")).toBe(false);
+    expect(combobox?.hasAttribute("aria-haspopup")).toBe(false);
+    expect(combobox?.hasAttribute("aria-controls")).toBe(false);
+    expect(textarea?.getAttribute("role")).toBe("combobox");
+    expect(textarea?.getAttribute("aria-expanded")).toBe("true");
+    expect(textarea?.getAttribute("aria-haspopup")).toBe("listbox");
     expect(textarea?.getAttribute("aria-controls")).toBe("chat-slash-menu-listbox");
     expect(textarea?.getAttribute("aria-autocomplete")).toBe("list");
     expect(listbox?.getAttribute("role")).toBe("listbox");
@@ -562,10 +566,13 @@ describe("chat slash menu accessibility", () => {
 
     expect(container.querySelector(".slash-menu")).toBeNull();
     expect(
+      container.querySelector<HTMLTextAreaElement>("textarea")?.getAttribute("aria-expanded"),
+    ).toBe("false");
+    expect(
       container
         .querySelector<HTMLElement>(".agent-chat__composer-combobox")
-        ?.getAttribute("aria-expanded"),
-    ).toBe("false");
+        ?.hasAttribute("aria-expanded"),
+    ).toBe(false);
     expect(
       container
         .querySelector<HTMLTextAreaElement>("textarea")
