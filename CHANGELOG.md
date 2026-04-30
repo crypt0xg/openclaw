@@ -4,6 +4,8 @@ Docs: https://docs.openclaw.ai
 
 ## Unreleased
 
+## 2026.4.29
+
 ### Changes
 
 - Dependencies: refresh workspace runtime, plugin, and tooling packages, including ACP, Pi, AWS SDK, TypeBox, pnpm, oxlint, oxfmt, jsdom, pdfjs, ciao, and tokenjuice, while keeping patched ACP behavior and lint gates current. Thanks @mariozechner.
