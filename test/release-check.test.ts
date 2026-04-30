@@ -11,6 +11,8 @@ import {
   collectAppcastSparkleVersionErrors,
   collectBundledExtensionManifestErrors,
   collectBundledPluginRootRuntimeMirrorErrors,
+  collectCriticalPluginSdkEntrypointSizeErrors,
+  collectDeclaredRootRuntimeDependencyMetadataErrors,
   collectForbiddenPackContentPaths,
   collectInstalledBundledPluginRuntimeDepErrors,
   bundledRuntimeDependencySentinelCandidates,
@@ -20,6 +22,7 @@ import {
   collectPackUnpackedSizeErrors,
   createPackedCliSmokeEnv,
   createPackedBundledPluginPostinstallEnv,
+  MAX_CRITICAL_PLUGIN_SDK_ENTRYPOINT_BYTES,
   PACKED_CLI_SMOKE_COMMANDS,
   packageNameFromSpecifier,
   resolveMissingPackBuildHint,
@@ -262,6 +265,34 @@ describe("bundled plugin root runtime mirrors", () => {
     ]);
   });
 
+  it("flags mirrored root runtime metadata without root deps", () => {
+    expect(
+      collectDeclaredRootRuntimeDependencyMetadataErrors({
+        dependencies: { semver: "7.7.4" },
+        openclaw: {
+          bundle: {
+            mirroredRootRuntimeDependencies: ["json5", "semver"],
+          },
+        },
+      }),
+    ).toEqual([
+      "package.json openclaw.bundle.mirroredRootRuntimeDependencies declares 'json5' but package.json dependencies/optionalDependencies do not include it.",
+    ]);
+  });
+
+  it("accepts mirrored root runtime metadata backed by root deps", () => {
+    expect(
+      collectDeclaredRootRuntimeDependencyMetadataErrors({
+        dependencies: { json5: "^2.2.3", semver: "7.7.4" },
+        openclaw: {
+          bundle: {
+            mirroredRootRuntimeDependencies: ["json5", "semver"],
+          },
+        },
+      }),
+    ).toEqual([]);
+  });
+
   it("does not derive root mirrors for root chunks sourced from the owning plugin", () => {
     const tempRoot = mkdtempSync(join(tmpdir(), "openclaw-root-mirror-owned-"));
 
@@ -355,9 +386,37 @@ describe("bundled plugin root runtime mirrors", () => {
             },
           ],
         ]),
-        rootPackageJson: { dependencies: { "@larksuiteoapi/node-sdk": "^1.61.0" } },
+        rootPackageJson: {
+          dependencies: { "@larksuiteoapi/node-sdk": "^1.61.0" },
+          openclaw: {
+            bundle: {
+              mirroredRootRuntimeDependencies: ["@larksuiteoapi/node-sdk"],
+            },
+          },
+        },
       }),
     ).toEqual([]);
+  });
+
+  it("flags root mirrors omitted from mirrored root runtime metadata", () => {
+    expect(
+      collectBundledPluginRootRuntimeMirrorErrors({
+        bundledRuntimeDependencySpecs: makeBundledSpecs(),
+        requiredRootMirrors: new Map([
+          [
+            "@larksuiteoapi/node-sdk",
+            {
+              importers: new Set(["probe-Cz2PiFtC.js"]),
+              pluginIds: ["feishu"],
+              spec: "^1.60.0",
+            },
+          ],
+        ]),
+        rootPackageJson: { dependencies: { "@larksuiteoapi/node-sdk": "^1.60.0" } },
+      }),
+    ).toEqual([
+      "installed package root mirror '@larksuiteoapi/node-sdk' for dist importers: probe-Cz2PiFtC.js is missing from package.json openclaw.bundle.mirroredRootRuntimeDependencies. Add it there so packaged runtime installs the mirrored dependency, or keep imports under dist/extensions/feishu/.",
+    ]);
   });
 
   it("accepts matching root mirrors for plugin deps imported by root dist", () => {
@@ -374,7 +433,14 @@ describe("bundled plugin root runtime mirrors", () => {
             },
           ],
         ]),
-        rootPackageJson: { dependencies: { "@larksuiteoapi/node-sdk": "^1.60.0" } },
+        rootPackageJson: {
+          dependencies: { "@larksuiteoapi/node-sdk": "^1.60.0" },
+          openclaw: {
+            bundle: {
+              mirroredRootRuntimeDependencies: ["@larksuiteoapi/node-sdk"],
+            },
+          },
+        },
       }),
     ).toEqual([]);
   });
@@ -406,12 +472,12 @@ describe("collectForbiddenPackPaths", () => {
     expect(
       collectForbiddenPackPaths([
         "dist/index.js",
-        bundledDistPluginFile("discord", "node_modules/@buape/carbon/index.js"),
+        bundledDistPluginFile("discord", "node_modules/@discordjs/voice/index.js"),
         bundledPluginFile("tlon", "node_modules/.bin/tlon"),
         "node_modules/.bin/openclaw",
       ]),
     ).toEqual([
-      bundledDistPluginFile("discord", "node_modules/@buape/carbon/index.js"),
+      bundledDistPluginFile("discord", "node_modules/@discordjs/voice/index.js"),
       bundledPluginFile("tlon", "node_modules/.bin/tlon"),
       "node_modules/.bin/openclaw",
     ]);
@@ -554,6 +620,7 @@ describe("collectMissingPackPaths", () => {
         "dist/control-ui/index.html",
         "scripts/npm-runner.mjs",
         "scripts/preinstall-package-manager-warning.mjs",
+        "scripts/lib/bundled-runtime-deps-install.mjs",
         "scripts/lib/package-dist-imports.mjs",
         "scripts/postinstall-bundled-plugins.mjs",
         "dist/task-registry-control.runtime.js",
@@ -577,6 +644,8 @@ describe("collectMissingPackPaths", () => {
         "dist/index.js",
         "dist/entry.js",
         "dist/control-ui/index.html",
+        "dist/extensions/acpx/error-format.mjs",
+        "dist/extensions/acpx/mcp-command-line.mjs",
         "dist/extensions/acpx/mcp-proxy.mjs",
         bundledDistPluginFile("diffs", "assets/viewer-runtime.js"),
         ...requiredBundledPluginPackPaths,
@@ -584,6 +653,7 @@ describe("collectMissingPackPaths", () => {
         ...WORKSPACE_TEMPLATE_PACK_PATHS,
         "scripts/npm-runner.mjs",
         "scripts/preinstall-package-manager-warning.mjs",
+        "scripts/lib/bundled-runtime-deps-install.mjs",
         "scripts/lib/package-dist-imports.mjs",
         "scripts/postinstall-bundled-plugins.mjs",
         "dist/plugin-sdk/root-alias.cjs",
@@ -658,6 +728,30 @@ describe("collectPackUnpackedSizeErrors", () => {
     ).toEqual([
       "npm pack --dry-run produced no unpackedSize data; pack size budget was not verified.",
     ]);
+  });
+});
+
+describe("collectCriticalPluginSdkEntrypointSizeErrors", () => {
+  it("flags oversized plugin SDK test-contract entrypoints before publish", () => {
+    const root = mkdtempSync(join(tmpdir(), "release-check-critical-sdk-"));
+    try {
+      const pluginSdkDir = join(root, "dist", "plugin-sdk");
+      mkdirSync(pluginSdkDir, { recursive: true });
+      writeFileSync(join(pluginSdkDir, "agent-runtime-test-contracts.js"), "export {};\n");
+      writeFileSync(join(pluginSdkDir, "provider-test-contracts.js"), "export {};\n");
+      writeFileSync(
+        join(pluginSdkDir, "plugin-test-contracts.js"),
+        "x".repeat(MAX_CRITICAL_PLUGIN_SDK_ENTRYPOINT_BYTES + 1),
+      );
+
+      expect(collectCriticalPluginSdkEntrypointSizeErrors(root)).toEqual([
+        `dist/plugin-sdk/plugin-test-contracts.js is ${
+          MAX_CRITICAL_PLUGIN_SDK_ENTRYPOINT_BYTES + 1
+        } bytes, exceeding ${MAX_CRITICAL_PLUGIN_SDK_ENTRYPOINT_BYTES} bytes. Keep public SDK test-contract entrypoints lazy and avoid bundling compiler/runtime internals.`,
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 
