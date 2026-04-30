@@ -1089,8 +1089,14 @@ describe("runCodexAppServerAttempt", () => {
     await run;
   });
 
-  it("drains pending batched steering when the turn completes before debounce flush", async () => {
-    const { requests, waitForMethod, completeTurn } = createStartedThreadHarness();
+  it("does not send pending batched steering after the turn completes before debounce flush", async () => {
+    let turnCompleted = false;
+    const { requests, waitForMethod, completeTurn } = createStartedThreadHarness(async (method) => {
+      if (method === "turn/steer" && turnCompleted) {
+        throw new Error("expectedTurnId does not match an active turn");
+      }
+      return undefined;
+    });
 
     const run = runCodexAppServerAttempt(
       createParams(path.join(tempDir, "session.jsonl"), path.join(tempDir, "workspace")),
@@ -1098,19 +1104,11 @@ describe("runCodexAppServerAttempt", () => {
     await waitForMethod("turn/start");
 
     expect(queueAgentHarnessMessage("session-1", "late context", { debounceMs: 1_000 })).toBe(true);
+    turnCompleted = true;
     await completeTurn({ threadId: "thread-1", turnId: "turn-1" });
     await run;
 
-    expect(requests.filter((entry) => entry.method === "turn/steer")).toEqual([
-      {
-        method: "turn/steer",
-        params: {
-          threadId: "thread-1",
-          expectedTurnId: "turn-1",
-          input: [{ type: "text", text: "late context", text_elements: [] }],
-        },
-      },
-    ]);
+    expect(requests.filter((entry) => entry.method === "turn/steer")).toEqual([]);
   });
 
   it("keeps legacy queue steering as separate turn/steer requests", async () => {
