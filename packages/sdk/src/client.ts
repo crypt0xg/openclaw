@@ -163,15 +163,6 @@ function unsupportedGatewayApi(api: string): never {
   throw new Error(`${api} is not supported by the current OpenClaw Gateway yet`);
 }
 
-function shouldPublishNormalizedGatewayEvent(event: GatewayEvent): boolean {
-  // `chat` is the Gateway's legacy/webchat projection of assistant output.
-  // App SDK consumers should render the canonical normalized `agent` stream
-  // instead; keeping both in `runs.events()` produces duplicate assistant UI
-  // deltas plus raw/debug events for the same run. Raw Gateway consumers can
-  // still subscribe through `rawEvents()`.
-  return event.event !== "chat";
-}
-
 export class OpenClaw {
   readonly agents: AgentsNamespace;
   readonly sessions: SessionsNamespace;
@@ -331,9 +322,6 @@ export class OpenClaw {
           const result = await next;
           if (result.done) {
             break;
-          }
-          if (!shouldPublishNormalizedGatewayEvent(result.value)) {
-            continue;
           }
           const normalized = normalizeGatewayEvent(result.value);
           this.recordReplayEvent(normalized);
