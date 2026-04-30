@@ -130,6 +130,21 @@ async function createFakeGateway(port = 0): Promise<{ url: string; close: () => 
           });
           sendJson(socket, {
             type: "event",
+            event: "chat",
+            seq: seq++,
+            payload: {
+              runId: "run-sdk-e2e",
+              sessionKey: params?.sessionKey,
+              state: "delta",
+              message: {
+                role: "assistant",
+                content: [{ type: "text", text: "hello from fake gateway" }],
+                timestamp: Date.now(),
+              },
+            },
+          });
+          sendJson(socket, {
+            type: "event",
             event: "agent",
             seq: seq++,
             payload: {

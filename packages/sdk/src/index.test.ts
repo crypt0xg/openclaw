@@ -309,12 +309,26 @@ describe("OpenClaw SDK", () => {
           },
         });
         fake.emit({
-          event: "agent",
+          event: "chat",
           seq: 3,
           payload: {
             runId: "run_fast",
+            sessionKey: "fast",
+            state: "delta",
+            message: {
+              role: "assistant",
+              content: [{ type: "text", text: "fast" }],
+              timestamp: ts + 2,
+            },
+          },
+        });
+        fake.emit({
+          event: "agent",
+          seq: 4,
+          payload: {
+            runId: "run_fast",
             stream: "lifecycle",
-            ts: ts + 2,
+            ts: ts + 3,
             data: { phase: "end" },
           },
         });

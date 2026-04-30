@@ -91,6 +91,7 @@ import {
 } from "../session-utils.js";
 import { applySessionsPatchToStore } from "../sessions-patch.js";
 import { resolveSessionKeyFromResolveParams } from "../sessions-resolve.js";
+import { setGatewayDedupeEntry } from "./agent-wait-dedupe.js";
 import { chatHandlers } from "./chat.js";
 import type {
   GatewayClient,
@@ -1334,7 +1335,25 @@ export const sessionsHandlers: GatewayRequestHandlers = {
                 Boolean(normalizeOptionalString(value)),
               )
             : [];
-        abortedRunId = runIds[0] ?? null;
+        const firstAbortedRunId = runIds[0] ?? null;
+        abortedRunId = firstAbortedRunId;
+        if (firstAbortedRunId) {
+          const endedAt = Date.now();
+          setGatewayDedupeEntry({
+            dedupe: context.dedupe,
+            key: `agent:${firstAbortedRunId}`,
+            entry: {
+              ts: endedAt,
+              ok: true,
+              payload: {
+                status: "timeout",
+                runId: firstAbortedRunId,
+                stopReason: "rpc",
+                endedAt,
+              },
+            },
+          });
+        }
         respond(
           true,
           {
