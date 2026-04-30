@@ -572,9 +572,10 @@ describe("modelsListCommand forward-compat", () => {
       expect(mocks.loadModelRegistry).not.toHaveBeenCalled();
       expect(mocks.hasProviderStaticCatalogForFilter).not.toHaveBeenCalled();
       expect(mocks.loadProviderCatalogModelsForList).not.toHaveBeenCalled();
-      expect(lastPrintedRows<{ key: string }>()).toEqual([
+      expect(lastPrintedRows<{ key: string; available: boolean }>()).toEqual([
         expect.objectContaining({
           key: "moonshot/kimi-k2.6",
+          available: false,
         }),
       ]);
     });
@@ -672,9 +673,10 @@ describe("modelsListCommand forward-compat", () => {
       expect(mocks.loadModelRegistry).not.toHaveBeenCalled();
       expect(mocks.hasProviderStaticCatalogForFilter).not.toHaveBeenCalled();
       expect(mocks.loadProviderCatalogModelsForList).not.toHaveBeenCalled();
-      expect(lastPrintedRows<{ key: string }>()).toEqual([
+      expect(lastPrintedRows<{ key: string; available: boolean }>()).toEqual([
         expect.objectContaining({
           key: "moonshot/kimi-k2.6",
+          available: false,
         }),
       ]);
     });
@@ -819,9 +821,10 @@ describe("modelsListCommand forward-compat", () => {
           loadAvailability: false,
         }),
       );
-      expect(lastPrintedRows<{ key: string }>()).toEqual([
+      expect(lastPrintedRows<{ key: string; available: boolean }>()).toEqual([
         expect.objectContaining({
           key: "anthropic/claude-opus-4-7",
+          available: false,
         }),
       ]);
     });
